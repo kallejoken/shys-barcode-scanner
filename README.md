@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-F9B013.svg?style=for-the-badge&labelColor=002039" alt="HACS Custom"></a>
+  <a href="https://www.home-assistant.io/integrations/marketplace/"><img src="https://img.shields.io/badge/HA%20Marketplace-Custom-F9B013.svg?style=for-the-badge&labelColor=002039" alt="Home Assistant Marketplace"></a>
   <a href="https://github.com/kallejoken/shys-barcode-scanner/releases"><img src="https://img.shields.io/badge/Version-1.0.0-00AEE7.svg?style=for-the-badge&labelColor=002039" alt="Version 1.0.0"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2024.12%2B-2E6EB4.svg?style=for-the-badge&labelColor=002039" alt="Home Assistant 2024.12+">
 </p>
@@ -17,30 +17,33 @@ Unbekannte Produkte lernst du einmal an, danach kennt Home Assistant sie für im
 > [!NOTE]
 > **Test-Repo:** Dieses Repository unter `kallejoken` ist die öffentliche Testversion.
 > Nach der Testphase zieht die Integration zu [SmartHome-yourself](https://github.com/SmartHome-yourself) um.
-> Wir sagen rechtzeitig Bescheid, dann einfach das neue Repo in HACS eintragen.
+> Wir sagen rechtzeitig Bescheid, dann einfach das neue Repo im Marketplace eintragen.
 
-## Installation über HACS in 3 Schritten
+## Installation über den Home Assistant Marketplace in 3 Schritten
 
-**1. Repository zu HACS hinzufügen**
+Seit Home Assistant 2026.11 ist der **Marketplace** (ehemals HACS) direkt eingebaut – du musst nichts extra vorinstallieren.
 
-[![In Home Assistant öffnen: HACS-Repository hinzufügen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kallejoken&repository=shys-barcode-scanner&category=integration)
+**1. Repository im Marketplace hinzufügen**
 
-Ein Klick auf den Button öffnet HACS direkt in deinem Home Assistant.
-Ohne Button: *HACS → oben rechts ⋮ → Benutzerdefinierte Repositories* →
-URL `https://github.com/kallejoken/shys-barcode-scanner` eintragen, Kategorie **Integration** → *Hinzufügen*.
+[![In Home Assistant öffnen: Repository im Marketplace hinzufügen](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kallejoken&repository=shys-barcode-scanner&category=integration)
 
-**2. Herunterladen & neu starten**
+Ein Klick auf den Button öffnet das Repository direkt im Marketplace deines Home Assistant.
+Ohne Button: *Einstellungen → Marketplace → oben rechts „Über Link hinzufügen“* →
+`kallejoken/shys-barcode-scanner` (oder die volle GitHub-URL) eintragen → *Hinzufügen*.
+*(Auf älteren HA-Versionen vor 2026.11: über HACS → Benutzerdefinierte Repositories, Kategorie **Integration**.)*
 
-In HACS **SHYS Barcode Scanner** öffnen → *Herunterladen* → Home Assistant neu starten
+**2. Installieren & neu starten**
+
+Im Marketplace **SHYS Barcode Scanner** öffnen → *Installieren* → Home Assistant neu starten
 (*Einstellungen → System → oben rechts ⏻ → Home Assistant neu starten*).
 
 **3. Integration hinzufügen & Liste wählen**
 
 *Einstellungen → Geräte & Dienste → Integration hinzufügen → „SHYS Barcode Scanner“* →
-deine Ziel-`todo`-Liste auswählen, z. B. `todo.shopping_list` oder den Picnic-Warenkorb. Fertig – einfach scannen!
+deine Ziel-`todo`-Liste auswählen, z. B. `todo.shopping_list`, **Bring!** oder den **Picnic**-Warenkorb. Fertig – einfach scannen!
 
 <details>
-<summary>Manuelle Installation ohne HACS</summary>
+<summary>Manuelle Installation ohne Marketplace</summary>
 
 Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components/` kopieren und Home Assistant neu starten.
 </details>
@@ -65,7 +68,7 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 4. **Gar nichts gefunden:** Der Code wartet unter **Unbekannte Scans** aufs Anlernen.
 5. Der Scanner piept und zeigt das Ergebnis an.
 
-Ändert sich mal eine API, reicht ein HACS-Update. Der ESP muss nicht neu geflasht werden.
+Ändert sich mal eine API, reicht ein Update über den Marketplace. Der ESP muss nicht neu geflasht werden.
 
 ## Das Panel in der Seitenleiste
 
@@ -91,11 +94,18 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 | User-Agent | SHYSBarcodeScanner/1.0 … | Open Food Facts wünscht `AppName/Version (deine-mail@example.com)` |
 | ESPHome-Gerät für Rückmeldung | leer | Nur nötig, wenn das Event keinen Gerätenamen mitschickt |
 
-## Picnic
+## Unterstützte Einkaufslisten (Bring!, Picnic & Co.)
 
-Funktioniert ohne Extra-Einrichtung: Die offizielle [Picnic-Integration](https://www.home-assistant.io/integrations/picnic/) legt den Warenkorb als To-do-Liste an.
-Einfach diese Liste als Standard-Liste wählen (oder nur für einzelne Produkte als Ziel-Liste).
+Es funktioniert **jede** Integration in Home Assistant, die eine `todo`-Liste anbietet – zum Beispiel:
 
+- **Home Assistant Einkaufsliste / Lokale To-do-Listen** (komplett offline)
+- **Bring!** (offizielle Home-Assistant-Integration)
+- **Picnic** (Warenkorb direkt als `todo`-Liste)
+- **Todoist**, **Google Tasks**, **Microsoft To Do**, **CalDAV** (z. B. Nextcloud Tasks), **Mealie**
+
+Über die optionale Ziel-Liste pro Produkt im Panel lassen sich auch mehrere Listen parallel nutzen (z. B. Lebensmittel an Bring!/Picnic und Drogerie auf eine eigene Liste).
+
+**Hinweis zu [Picnic](https://www.home-assistant.io/integrations/picnic/):**
 - Picnic sucht nach dem Text auf der Liste. Trifft es mal das falsche Produkt, benennst du den Eintrag in der Produktdatenbank einmal passend um.
 - Der Picnic-Warenkorb kann Einträge nicht umbenennen. Beim „Menge hochzählen“ wird das Produkt deshalb einfach nochmal hinzugefügt.
 
