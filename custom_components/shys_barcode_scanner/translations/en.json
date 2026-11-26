@@ -1,0 +1,171 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SHYS Barcode Scanner",
+        "description": "Pick the list scanned products go to. Everything else is under 'Configure' later.",
+        "data": {
+          "todo_entity": "Default list",
+          "name": "Name"
+        },
+        "data_description": {
+          "todo_entity": "To-do list for scanned products, e.g. shopping list or Picnic cart."
+        }
+      }
+    },
+    "error": {
+      "invalid_todo": "Please pick a to-do list (todo.*)."
+    },
+    "abort": {
+      "already_configured": "Barcode Scanner is already set up.",
+      "single_instance_allowed": "Barcode Scanner is already set up."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Barcode Scanner options",
+        "data": {
+          "todo_entity": "Default list",
+          "duplicate_mode": "Already on the list",
+          "unknown_mode": "Unknown codes",
+          "name_format": "Text on the list",
+          "use_openfoodfacts": "Query Open Food Facts",
+          "use_eansuche": "Query ean-suche.net",
+          "opengtindb_query_id": "OpengtinDB query ID (optional)",
+          "user_agent": "User agent",
+          "notify_service": "Notify on unknown code (optional)",
+          "esphome_device_prefix": "ESPHome device for feedback (optional)"
+        },
+        "data_description": {
+          "todo_entity": "To-do list for scanned products, e.g. shopping list or Picnic cart.",
+          "duplicate_mode": "What happens if the product is already open on the list.",
+          "unknown_mode": "Unknown codes always end up in 'Unknown scans' in the panel.",
+          "use_eansuche": "Free, about 60 requests per hour.",
+          "opengtindb_query_id": "Your own ID from opengtindb.org/userid.php. Empty = off.",
+          "user_agent": "Open Food Facts asks for 'AppName/Version (your-mail@example.com)'.",
+          "notify_service": "e.g. notify.mobile_app_my_phone. Empty = none.",
+          "esphome_device_prefix": "Only needed if the event has no device name, e.g. barcode-scanner."
+        }
+      }
+    },
+    "error": {
+      "invalid_todo": "Please pick a to-do list (todo.*).",
+      "invalid_notify": "The service must start with notify."
+    }
+  },
+  "selector": {
+    "duplicate_mode": {
+      "options": {
+        "allow": "Add again anyway",
+        "skip": "Don't add again",
+        "increment": "Count up (2x, 3x …)"
+      }
+    },
+    "unknown_mode": {
+      "options": {
+        "pending_only": "Only remember for learning",
+        "add_ean_and_pending": "Add code to the list and remember for learning"
+      }
+    },
+    "name_format": {
+      "options": {
+        "brand_product": "Brand + product",
+        "product_only": "Product only"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_scan": {
+        "name": "Last scan"
+      },
+      "known_products": {
+        "name": "Known products"
+      },
+      "unknown_count": {
+        "name": "Unknown scans"
+      }
+    }
+  },
+  "services": {
+    "scan": {
+      "name": "Process code",
+      "description": "Processes a code like a real scan.",
+      "fields": {
+        "ean": {
+          "name": "EAN / Code",
+          "description": "Barcode or custom code."
+        },
+        "device": {
+          "name": "ESPHome device",
+          "description": "Optional, for feedback (e.g. barcode-scanner)."
+        }
+      }
+    },
+    "learn_product": {
+      "name": "Learn product",
+      "description": "Stores a code with your own name in the local database.",
+      "fields": {
+        "ean": {
+          "name": "EAN / Code",
+          "description": "Barcode or custom code."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name on the list."
+        },
+        "brand": {
+          "name": "Brand",
+          "description": "Optional."
+        },
+        "target_list": {
+          "name": "Target list",
+          "description": "Optional other to-do list for this product."
+        },
+        "add_to_list": {
+          "name": "Add to list now",
+          "description": "Add the product right away."
+        }
+      }
+    },
+    "delete_product": {
+      "name": "Delete product",
+      "description": "Removes a code from the local database.",
+      "fields": {
+        "ean": {
+          "name": "EAN / Code",
+          "description": "Code to delete."
+        }
+      }
+    },
+    "dismiss_pending": {
+      "name": "Dismiss unknown scan",
+      "description": "Removes a code from 'Unknown scans'.",
+      "fields": {
+        "ean": {
+          "name": "EAN / Code",
+          "description": "Code to dismiss."
+        }
+      }
+    },
+    "export_database": {
+      "name": "Export database",
+      "description": "Returns the local database as JSON."
+    },
+    "import_database": {
+      "name": "Import database",
+      "description": "Imports products from an export.",
+      "fields": {
+        "data": {
+          "name": "Data",
+          "description": "Export JSON (object with products)."
+        },
+        "merge": {
+          "name": "Merge",
+          "description": "On = merge, off = replace database."
+        }
+      }
+    }
+  }
+}

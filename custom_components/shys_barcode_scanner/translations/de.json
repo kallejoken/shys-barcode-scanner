@@ -1,0 +1,171 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SHYS Barcode Scanner",
+        "description": "Wähle die Liste, auf die gescannte Produkte kommen. Alles Weitere findest du später unter „Konfigurieren“.",
+        "data": {
+          "todo_entity": "Standard-Liste",
+          "name": "Name"
+        },
+        "data_description": {
+          "todo_entity": "To-do-Liste für gescannte Produkte, z. B. Einkaufsliste oder Picnic-Warenkorb."
+        }
+      }
+    },
+    "error": {
+      "invalid_todo": "Bitte eine To-do-Liste (todo.*) wählen."
+    },
+    "abort": {
+      "already_configured": "Der Barcode Scanner ist bereits eingerichtet.",
+      "single_instance_allowed": "Der Barcode Scanner ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Barcode Scanner – Optionen",
+        "data": {
+          "todo_entity": "Standard-Liste",
+          "duplicate_mode": "Schon auf der Liste",
+          "unknown_mode": "Unbekannte Codes",
+          "name_format": "Text auf der Liste",
+          "use_openfoodfacts": "Open Food Facts abfragen",
+          "use_eansuche": "ean-suche.net abfragen",
+          "opengtindb_query_id": "OpengtinDB-QueryID (optional)",
+          "user_agent": "User-Agent",
+          "notify_service": "Benachrichtigung bei unbekanntem Code (optional)",
+          "esphome_device_prefix": "ESPHome-Gerät für Rückmeldung (optional)"
+        },
+        "data_description": {
+          "todo_entity": "To-do-Liste für gescannte Produkte, z. B. Einkaufsliste oder Picnic-Warenkorb.",
+          "duplicate_mode": "Was passiert, wenn das Produkt schon offen auf der Liste steht.",
+          "unknown_mode": "Unbekannte Codes landen immer in „Unbekannte Scans“ im Panel.",
+          "use_eansuche": "Kostenlos, ca. 60 Abfragen pro Stunde.",
+          "opengtindb_query_id": "Eigene ID von opengtindb.org/userid.php. Leer = aus.",
+          "user_agent": "Open Food Facts wünscht „AppName/Version (deine-mail@example.com)“.",
+          "notify_service": "z. B. notify.mobile_app_mein_handy. Leer = keine.",
+          "esphome_device_prefix": "Nur nötig, wenn das Event keinen Gerätenamen mitschickt, z. B. barcode-scanner."
+        }
+      }
+    },
+    "error": {
+      "invalid_todo": "Bitte eine To-do-Liste (todo.*) wählen.",
+      "invalid_notify": "Der Dienst muss mit notify. beginnen."
+    }
+  },
+  "selector": {
+    "duplicate_mode": {
+      "options": {
+        "allow": "Trotzdem nochmal eintragen",
+        "skip": "Nicht nochmal eintragen",
+        "increment": "Menge hochzählen (2x, 3x …)"
+      }
+    },
+    "unknown_mode": {
+      "options": {
+        "pending_only": "Nur zum Anlernen merken",
+        "add_ean_and_pending": "Code auf die Liste setzen und zum Anlernen merken"
+      }
+    },
+    "name_format": {
+      "options": {
+        "brand_product": "Marke + Produkt",
+        "product_only": "Nur Produkt"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "last_scan": {
+        "name": "Letzter Scan"
+      },
+      "known_products": {
+        "name": "Bekannte Produkte"
+      },
+      "unknown_count": {
+        "name": "Unbekannte Scans"
+      }
+    }
+  },
+  "services": {
+    "scan": {
+      "name": "Code verarbeiten",
+      "description": "Verarbeitet einen Code wie ein echter Scan.",
+      "fields": {
+        "ean": {
+          "name": "EAN / Code",
+          "description": "Barcode oder eigener Code."
+        },
+        "device": {
+          "name": "ESPHome-Gerät",
+          "description": "Optional, für die Rückmeldung (z. B. barcode-scanner)."
+        }
+      }
+    },
+    "learn_product": {
+      "name": "Produkt anlernen",
+      "description": "Speichert einen Code mit eigenem Namen in der lokalen Datenbank.",
+      "fields": {
+        "ean": {
+          "name": "EAN / Code",
+          "description": "Barcode oder eigener Code."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name auf der Liste."
+        },
+        "brand": {
+          "name": "Marke",
+          "description": "Optional."
+        },
+        "target_list": {
+          "name": "Ziel-Liste",
+          "description": "Optional andere To-do-Liste für dieses Produkt."
+        },
+        "add_to_list": {
+          "name": "Gleich auf die Liste",
+          "description": "Produkt direkt eintragen."
+        }
+      }
+    },
+    "delete_product": {
+      "name": "Produkt löschen",
+      "description": "Entfernt einen Code aus der lokalen Datenbank.",
+      "fields": {
+        "ean": {
+          "name": "EAN / Code",
+          "description": "Zu löschender Code."
+        }
+      }
+    },
+    "dismiss_pending": {
+      "name": "Unbekannten Scan verwerfen",
+      "description": "Entfernt einen Code aus „Unbekannte Scans“.",
+      "fields": {
+        "ean": {
+          "name": "EAN / Code",
+          "description": "Zu verwerfender Code."
+        }
+      }
+    },
+    "export_database": {
+      "name": "Datenbank exportieren",
+      "description": "Gibt die lokale Datenbank als JSON zurück."
+    },
+    "import_database": {
+      "name": "Datenbank importieren",
+      "description": "Importiert Produkte aus einem Export.",
+      "fields": {
+        "data": {
+          "name": "Daten",
+          "description": "Export-JSON (Objekt mit products)."
+        },
+        "merge": {
+          "name": "Zusammenführen",
+          "description": "An = ergänzen, Aus = Datenbank ersetzen."
+        }
+      }
+    }
+  }
+}
