@@ -1,0 +1,21 @@
+{
+  "domain": "shys_barcode_scanner",
+  "name": "SHYS Barcode Scanner",
+  "codeowners": [
+    "@kallejoken",
+    "@SmartHome-yourself"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http",
+    "panel_custom",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/kallejoken/shys-barcode-scanner",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/kallejoken/shys-barcode-scanner/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.0.0"
+}
