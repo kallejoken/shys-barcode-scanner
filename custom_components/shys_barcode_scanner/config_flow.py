@@ -11,7 +11,7 @@ from homeassistant.config_entries import (
     ConfigFlowResult,
     OptionsFlow,
 )
-from homeassistant.core import callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 
 from .const import (
@@ -19,7 +19,9 @@ from .const import (
     CONF_ESPHOME_DEVICE_PREFIX,
     CONF_NAME,
     CONF_NAME_FORMAT,
+    CONF_NOTIFY_ONLY_HOME,
     CONF_NOTIFY_SERVICE,
+    CONF_NOTIFY_SERVICES,
     CONF_OPENGTINDB_QUERY_ID,
     CONF_TODO_ENTITY,
     CONF_UNKNOWN_MODE,
@@ -31,15 +33,17 @@ from .const import (
     DEFAULT_TODO_ENTITY,
     DOMAIN,
     DUPLICATE_MODES,
+    INTERNAL_NOTIFY_SERVICES,
     NAME_FORMATS,
     UNKNOWN_MODES,
+    configured_notify_services,
+    normalize_notify_services,
 )
 
 TODO_SELECTOR = selector.EntitySelector(selector.EntitySelectorConfig(domain="todo"))
 TEXT_SELECTOR = selector.TextSelector()
 
 TEXT_OPTION_KEYS = (
-    CONF_NOTIFY_SERVICE,
     CONF_OPENGTINDB_QUERY_ID,
     CONF_USER_AGENT,
     CONF_ESPHOME_DEVICE_PREFIX,
@@ -54,9 +58,55 @@ def _select(options: list[str], key: str) -> selector.SelectSelector:
     )
 
 
-def build_options_schema(current: dict[str, Any]) -> vol.Schema:
+def available_notify_services(
+    hass: HomeAssistant | None, current: list[str] | None = None
+) -> list[str]:
+    """Auswahl für Notify-Dienste: mobile_app_* zuerst, interne Systemdienste ausgeblendet."""
+    current = list(current or [])
+    registered: dict[str, Any] = {}
+    if hass is not None:
+        try:
+            registered = dict(hass.services.async_services().get("notify") or {})
+        except Exception:  # noqa: BLE001 - Liste ist best effort
+            registered = {}
+
+    mobile: list[str] = []
+    other: list[str] = []
+    for name in registered:
+        full = f"notify.{name}"
+        if name in INTERNAL_NOTIFY_SERVICES and full not in current:
+            continue
+        if name.startswith("mobile_app_"):
+            mobile.append(full)
+        else:
+            other.append(full)
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in [*sorted(mobile), *sorted(other), *current]:
+        if item and item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
+def _notify_selector(options: list[str]) -> selector.SelectSelector:
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=options,
+            multiple=True,
+            custom_value=True,
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
+
+
+def build_options_schema(
+    current: dict[str, Any], hass: HomeAssistant | None = None
+) -> vol.Schema:
     """Options-Schema mit aktuellen Werten als Vorbelegung."""
     values = {**DEFAULT_OPTIONS, **current}
+    current_notify = configured_notify_services(values)
     schema: dict[Any, Any] = {
         vol.Required(
             CONF_TODO_ENTITY, default=values.get(CONF_TODO_ENTITY) or DEFAULT_TODO_ENTITY
@@ -74,6 +124,14 @@ def build_options_schema(current: dict[str, Any]) -> vol.Schema:
             CONF_USE_OPENFOODFACTS, default=bool(values[CONF_USE_OPENFOODFACTS])
         ): selector.BooleanSelector(),
         vol.Required(CONF_USE_EANSUCHE, default=bool(values[CONF_USE_EANSUCHE])): selector.BooleanSelector(),
+        vol.Optional(
+            CONF_NOTIFY_SERVICES,
+            default=current_notify,
+            description={"suggested_value": current_notify},
+        ): _notify_selector(available_notify_services(hass, current_notify)),
+        vol.Required(
+            CONF_NOTIFY_ONLY_HOME, default=bool(values.get(CONF_NOTIFY_ONLY_HOME, False))
+        ): selector.BooleanSelector(),
     }
     # Optionale Texte mit suggested_value, damit man sie auch wieder leeren kann
     for key in TEXT_OPTION_KEYS:
@@ -84,11 +142,19 @@ def build_options_schema(current: dict[str, Any]) -> vol.Schema:
 
 
 def normalize_options(user_input: dict[str, Any]) -> dict[str, Any]:
-    """Leere Textfelder als "" speichern, Leerraum entfernen."""
+    """Leere Textfelder als "" speichern, Notify-Liste säubern, Legacy-Schlüssel entfernen."""
     data = dict(user_input)
     for key in TEXT_OPTION_KEYS:
         data[key] = (data.get(key) or "").strip()
+    data[CONF_NOTIFY_SERVICES] = normalize_notify_services(data.get(CONF_NOTIFY_SERVICES))
+    data.pop(CONF_NOTIFY_SERVICE, None)
+    data[CONF_NOTIFY_ONLY_HOME] = bool(data.get(CONF_NOTIFY_ONLY_HOME, False))
     return data
+
+
+def validate_notify_services(services: list[str]) -> bool:
+    """Jede Angabe muss ein notify.*-Dienst sein."""
+    return all(service.startswith("notify.") for service in services)
 
 
 class ShysBarcodeConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -136,12 +202,13 @@ class ShysBarcodeOptionsFlow(OptionsFlow):
             data = normalize_options(user_input)
             if not str(data.get(CONF_TODO_ENTITY, "")).startswith("todo."):
                 errors[CONF_TODO_ENTITY] = "invalid_todo"
-            notify = data.get(CONF_NOTIFY_SERVICE, "")
-            if notify and not notify.startswith("notify."):
-                errors[CONF_NOTIFY_SERVICE] = "invalid_notify"
+            if not validate_notify_services(data.get(CONF_NOTIFY_SERVICES, [])):
+                errors[CONF_NOTIFY_SERVICES] = "invalid_notify"
             if not errors:
                 return self.async_create_entry(title="", data=data)
-            current = {**current, **user_input}
+            current = {**current, **data}
         return self.async_show_form(
-            step_id="init", data_schema=build_options_schema(current), errors=errors
+            step_id="init",
+            data_schema=build_options_schema(current, self.hass),
+            errors=errors,
         )

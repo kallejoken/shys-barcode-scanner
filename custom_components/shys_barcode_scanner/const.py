@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "shys_barcode_scanner"
 NAME: Final = "SHYS Barcode Scanner"
-VERSION: Final = "1.1.0"
+VERSION: Final = "1.2.0"
 
 # Lokale Datenbank (HA-Store unter <config>/.storage/shys_barcode_scanner)
 STORAGE_KEY: Final = DOMAIN
@@ -47,8 +47,13 @@ CONF_USE_OPENFOODFACTS: Final = "use_openfoodfacts"
 CONF_USE_EANSUCHE: Final = "use_eansuche"
 CONF_OPENGTINDB_QUERY_ID: Final = "opengtindb_query_id"
 CONF_USER_AGENT: Final = "user_agent"
-CONF_NOTIFY_SERVICE: Final = "notify_service"
+CONF_NOTIFY_SERVICE: Final = "notify_service"  # Legacy, bleibt für bestehende Configs
+CONF_NOTIFY_SERVICES: Final = "notify_services"
+CONF_NOTIFY_ONLY_HOME: Final = "notify_only_home"
 CONF_ESPHOME_DEVICE_PREFIX: Final = "esphome_device_prefix"
+
+# Interne Notify-Dienste, die nicht in der Mehrfachauswahl erscheinen
+INTERNAL_NOTIFY_SERVICES: Final = frozenset({"notify", "persistent_notification", "send_message"})
 
 # Duplikat-Verhalten
 DUPLICATE_ALLOW: Final = "allow"
@@ -81,7 +86,8 @@ DEFAULT_OPTIONS: Final = {
     CONF_USE_EANSUCHE: True,
     CONF_OPENGTINDB_QUERY_ID: "",
     CONF_USER_AGENT: DEFAULT_USER_AGENT,
-    CONF_NOTIFY_SERVICE: "",
+    CONF_NOTIFY_SERVICES: [],
+    CONF_NOTIFY_ONLY_HOME: False,
     CONF_ESPHOME_DEVICE_PREFIX: "",
 }
 
@@ -124,3 +130,40 @@ ATTR_MERGE: Final = "merge"
 
 # Maximale Länge eines Codes (QR-Codes dürfen länger sein als EANs)
 MAX_CODE_LENGTH: Final = 128
+
+def normalize_notify_services(value: object) -> list[str]:
+    """Liste von Notify-Diensten säubern: trimmen, leere ignorieren, Reihenfolge behalten, deduplizieren."""
+    if value is None or value is False:
+        items: list[object] = []
+    elif isinstance(value, str):
+        items = [value]
+    elif isinstance(value, (list, tuple, set)):
+        items = list(value)
+    else:
+        items = [value]
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in items:
+        service = str(raw or "").strip()
+        if not service or service in seen:
+            continue
+        seen.add(service)
+        result.append(service)
+    return result
+
+
+def configured_notify_services(config: dict) -> list[str]:
+    """Konfigurierte Notify-Dienste lesen (notify_services, sonst Legacy notify_service)."""
+    services = normalize_notify_services(config.get(CONF_NOTIFY_SERVICES))
+    if services:
+        return services
+    return normalize_notify_services(config.get(CONF_NOTIFY_SERVICE))
+
+
+def split_notify_service(service: str) -> tuple[str, str]:
+    """'notify.mobile_app_handy' oder 'mobile_app_handy' -> ('notify', 'mobile_app_handy')."""
+    service = (service or "").strip()
+    domain, _, name = service.partition(".")
+    if not name:
+        return "notify", domain
+    return domain, name

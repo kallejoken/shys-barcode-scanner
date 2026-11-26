@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.util import slugify
 
 from .const import (
     ACTION_ADDED,
@@ -20,7 +21,7 @@ from .const import (
     CONF_DUPLICATE_MODE,
     CONF_ESPHOME_DEVICE_PREFIX,
     CONF_NAME_FORMAT,
-    CONF_NOTIFY_SERVICE,
+    CONF_NOTIFY_ONLY_HOME,
     CONF_OPENGTINDB_QUERY_ID,
     CONF_TODO_ENTITY,
     CONF_UNKNOWN_MODE,
@@ -48,6 +49,8 @@ from .const import (
     STATUS_OK,
     STATUS_UNKNOWN,
     UNKNOWN_ADD_EAN_AND_PENDING,
+    configured_notify_services,
+    split_notify_service,
 )
 from .lookup import EanLookup, is_valid_gtin
 from .storage import BarcodeStorage, clean_code
@@ -159,6 +162,130 @@ def esphome_service_name(device: str) -> str:
     return f"{slug}_show_result"
 
 
+
+MOBILE_APP_PREFIX = "mobile_app_"
+_UNAVAILABLE_STATES = frozenset({"", "unknown", "unavailable", "none"})
+
+
+def mobile_app_slug(service_name: str) -> str | None:
+    """notify-Dienstname 'mobile_app_pixel' -> 'pixel', sonst None."""
+    if service_name.startswith(MOBILE_APP_PREFIX):
+        slug = service_name[len(MOBILE_APP_PREFIX):]
+        return slug or None
+    return None
+
+
+def find_device_tracker(hass: HomeAssistant, slug: str) -> str | None:
+    """device_tracker zu einem mobile_app-Slug finden."""
+    direct = f"device_tracker.{slug}"
+    if hass.states.get(direct) is not None:
+        return direct
+
+    try:
+        from homeassistant.helpers import device_registry as dr_mod
+        from homeassistant.helpers import entity_registry as er_mod
+
+        entity_reg = er_mod.async_get(hass)
+        device_reg = dr_mod.async_get(hass)
+    except Exception:  # noqa: BLE001 - Registries sind optional
+        return None
+    if entity_reg is None:
+        return None
+
+    wanted = slugify(slug)
+    for entry in entity_reg.entities.values():
+        entity_id = getattr(entry, "entity_id", "") or ""
+        domain = getattr(entry, "domain", None) or (entity_id.split(".", 1)[0] if entity_id else "")
+        if domain != "device_tracker":
+            continue
+        platform = getattr(entry, "platform", "") or ""
+        if platform and platform != "mobile_app":
+            continue
+        object_id = entity_id.split(".", 1)[-1]
+        if object_id == slug or slugify(object_id) == wanted:
+            return entity_id
+        device_id = getattr(entry, "device_id", None)
+        if not device_id or device_reg is None:
+            continue
+        device = device_reg.async_get(device_id)
+        if device is None:
+            continue
+        for name in (getattr(device, "name_by_user", None), getattr(device, "name", None)):
+            if name and slugify(name) == wanted:
+                return entity_id
+    return None
+
+
+def _state_is_home(state: str | None) -> bool | None:
+    """True = Zuhause, False = explizit nicht Zuhause, None = unklar (fail open)."""
+    if state is None:
+        return None
+    value = str(state).strip()
+    if value == "home":
+        return True
+    if value.casefold() in _UNAVAILABLE_STATES:
+        return None
+    return False
+
+
+def is_tracker_home(hass: HomeAssistant, tracker_entity_id: str) -> bool | None:
+    """Anwesenheit über person.* (falls verknüpft) oder den device_tracker selbst."""
+    linked: list[bool | None] = []
+    try:
+        persons = hass.states.async_all("person")
+    except Exception:  # noqa: BLE001
+        persons = []
+    for person in persons:
+        trackers = (getattr(person, "attributes", None) or {}).get("device_trackers") or []
+        if tracker_entity_id in trackers:
+            verdict = _state_is_home(getattr(person, "state", None))
+            if verdict is True:
+                return True
+            linked.append(verdict)
+    if linked:
+        # Mindestens eine Person verknüpft, keine davon home.
+        if all(v is None for v in linked):
+            return None
+        return False
+    state = hass.states.get(tracker_entity_id)
+    if state is None:
+        return None
+    return _state_is_home(state.state)
+
+
+def should_send_notification(hass: HomeAssistant, service: str, only_home: bool) -> bool:
+    """True, wenn der Notify-Dienst eine Unbekannt-Nachricht erhalten soll."""
+    if not only_home:
+        return True
+    domain, name = split_notify_service(service)
+    slug = mobile_app_slug(name) if domain == "notify" else None
+    if not slug:
+        _LOGGER.debug(
+            "notify_only_home: %s ist keinem Handy zuordenbar, sende trotzdem", service
+        )
+        return True
+    tracker = find_device_tracker(hass, slug)
+    if not tracker:
+        _LOGGER.debug(
+            "notify_only_home: kein device_tracker für %s gefunden, sende trotzdem", service
+        )
+        return True
+    verdict = is_tracker_home(hass, tracker)
+    if verdict is True:
+        return True
+    if verdict is None:
+        _LOGGER.debug(
+            "notify_only_home: Anwesenheit von %s (%s) unklar, sende trotzdem",
+            service,
+            tracker,
+        )
+        return True
+    _LOGGER.debug(
+        "notify_only_home: %s (%s) ist nicht zuhause, überspringe", service, tracker
+    )
+    return False
+
+
 class BarcodeManager:
     """Verarbeitet Scans und hält den letzten Status."""
 
@@ -231,17 +358,24 @@ class BarcodeManager:
     ) -> dict[str, Any] | None:
         """Antwort/Verwerfen aus der Push-Nachricht verarbeiten (Fehler nie nach außen)."""
         try:
-            if kind == "dismiss":
-                await self.async_dismiss(ean)
-                await self._async_clear_notification(ean)
-                return {"ean": ean, "dismissed": True}
-            name = clean_reply_text(reply_text)
-            if not name:
-                _LOGGER.info("Leere Antwort für %s ignoriert – Code bleibt in der Anlern-Liste", ean)
-                return None
-            result = await self.async_learn(ean, name, add_to_list=True, source=SOURCE_NOTIFICATION)
-            await self._async_clear_notification(ean)
-            return result
+            async with self._lock:
+                if kind == "dismiss":
+                    await self.async_dismiss(ean)
+                    return {"ean": ean, "dismissed": True}
+                name = clean_reply_text(reply_text)
+                if not name:
+                    _LOGGER.info("Leere Antwort für %s ignoriert – Code bleibt in der Anlern-Liste", ean)
+                    return None
+                existing = self.storage.get_product(ean)
+                if existing is not None:
+                    # Zweite, zeitgleiche Antwort: schon bekannt, nur aufräumen.
+                    await self.storage.remove_pending(ean)
+                    await self._async_clear_notification(ean)
+                    self.async_notify_listeners()
+                    return {"ean": ean, "already_known": True, "product": existing}
+                return await self.async_learn(
+                    ean, name, add_to_list=True, source=SOURCE_NOTIFICATION
+                )
         except Exception:  # Push-Antworten dürfen HA nie stören
             _LOGGER.exception("Push-Aktion %s für %s fehlgeschlagen", kind, ean)
             return None
@@ -413,40 +547,49 @@ class BarcodeManager:
         return None
 
     # ---------------------------------------------------- Benachrichtigung
-    def _notify_target(self) -> tuple[str, str] | None:
-        service = (self._config.get(CONF_NOTIFY_SERVICE) or "").strip()
-        if not service:
-            return None
-        domain, _, name = service.partition(".")
-        if not name:
-            domain, name = "notify", domain
-        return domain, name
+    def _notify_services(self) -> list[str]:
+        return configured_notify_services(self._config)
+
+    def _notify_targets(self, *, only_home: bool | None = None) -> list[tuple[str, str]]:
+        """Konfigurierte Notify-Ziele, optional nach Anwesenheit gefiltert."""
+        if only_home is None:
+            only_home = bool(self._config.get(CONF_NOTIFY_ONLY_HOME))
+        targets: list[tuple[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for service in self._notify_services():
+            if only_home and not should_send_notification(self.hass, service, True):
+                continue
+            domain, name = split_notify_service(service)
+            key = (domain, name)
+            if not name or key in seen:
+                continue
+            seen.add(key)
+            targets.append(key)
+        return targets
 
     async def _async_notify_unknown(self, code: str) -> None:
-        target = self._notify_target()
-        if target is None:
-            return
-        try:
-            await self.hass.services.async_call(
-                target[0], target[1], build_unknown_notification(code), blocking=True
-            )
-        except (HomeAssistantError, ValueError) as err:
-            _LOGGER.warning("Benachrichtigung über %s.%s fehlgeschlagen: %s", *target, err)
+        payload = build_unknown_notification(code)
+        for domain, name in self._notify_targets():
+            try:
+                await self.hass.services.async_call(domain, name, payload, blocking=True)
+            except Exception as err:  # noqa: BLE001 - ein Handy darf die anderen nicht blockieren
+                _LOGGER.warning("Benachrichtigung über %s.%s fehlgeschlagen: %s", domain, name, err)
 
     async def _async_clear_notification(self, code: str) -> None:
-        """Push-Nachricht auf dem Handy entfernen (best effort)."""
-        target = self._notify_target()
-        if target is None:
-            return
-        try:
-            await self.hass.services.async_call(
-                target[0],
-                target[1],
-                {"message": "clear_notification", "data": {"tag": notification_tag(code)}},
-                blocking=True,
-            )
-        except Exception as err:  # noqa: BLE001 - nur Aufräumen
-            _LOGGER.debug("clear_notification für %s fehlgeschlagen: %s", code, err)
+        """Push-Nachricht auf allen konfigurierten Handys entfernen (best effort)."""
+        payload = {"message": "clear_notification", "data": {"tag": notification_tag(code)}}
+        # Ohne Anwesenheitsfilter: auch abwesende Handys sollen die Meldung verlieren.
+        for domain, name in self._notify_targets(only_home=False):
+            try:
+                await self.hass.services.async_call(domain, name, payload, blocking=True)
+            except Exception as err:  # noqa: BLE001 - nur Aufräumen
+                _LOGGER.debug(
+                    "clear_notification über %s.%s für %s fehlgeschlagen: %s",
+                    domain,
+                    name,
+                    code,
+                    err,
+                )
 
     # ----------------------------------------------- Rückmeldung an ESP
     async def _async_feedback(self, result: dict[str, Any], device: str | None) -> None:
@@ -486,6 +629,7 @@ class BarcodeManager:
         result: dict[str, Any] = {"product": product}
         if add_to_list:
             result["scan"] = await self._add_product_to_list(product, None)
+        await self._async_clear_notification(clean_code(code))
         self.async_notify_listeners()
         return result
 
@@ -496,6 +640,7 @@ class BarcodeManager:
 
     async def async_dismiss(self, code: str) -> bool:
         removed = await self.storage.remove_pending(code)
+        await self._async_clear_notification(clean_code(code))
         self.async_notify_listeners()
         return removed
 
