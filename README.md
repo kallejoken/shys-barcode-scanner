@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://www.home-assistant.io/integrations/marketplace/"><img src="https://img.shields.io/badge/HA%20Marketplace-Custom-F9B013.svg?style=for-the-badge&labelColor=002039" alt="Home Assistant Marketplace"></a>
-  <a href="https://github.com/kallejoken/shys-barcode-scanner/releases"><img src="https://img.shields.io/badge/Version-1.0.0-00AEE7.svg?style=for-the-badge&labelColor=002039" alt="Version 1.0.0"></a>
+  <a href="https://github.com/kallejoken/shys-barcode-scanner/releases"><img src="https://img.shields.io/badge/Version-1.1.0-00AEE7.svg?style=for-the-badge&labelColor=002039" alt="Version 1.1.0"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2024.12%2B-2E6EB4.svg?style=for-the-badge&labelColor=002039" alt="Home Assistant 2024.12+">
 </p>
 
@@ -52,7 +52,8 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 
 - 🧠 **Selbstlernende lokale Datenbank:** Jeder Treffer wird gespeichert. Ab dem zweiten Scan läuft das Produkt komplett offline und mit deinem eigenen Namen.
 - 🔎 **Automatische Produktsuche:** Open Food Facts → ean-suche.net → optional OpengtinDB. Einzeln abschaltbar.
-- ✍️ **Anlern-Modus:** Unbekannte Codes landen in der Seitenleiste unter *Unbekannte Scans*. Name eintippen, fertig. Optional mit Push aufs Handy.
+- ✍️ **Anlern-Modus:** Unbekannte Codes landen in der Seitenleiste unter *Unbekannte Scans*. Name eintippen, fertig.
+- 📲 **Direkt-Antwort per Push (neu in 1.1.0):** Unbekannter Code? Die Home-Assistant-App meldet sich, du tippst den Produktnamen direkt in die Benachrichtigung – gespeichert und auf der Liste, ohne die App zu öffnen. Funktioniert auf iOS und Android.
 - 🗂️ **Eigenes Panel „Barcode Scanner“** in der Seitenleiste: Produkte suchen, umbenennen, löschen, eigene Codes für lose Ware oder QR-Sticker anlegen, Test-Scan, JSON-Export und -Import.
 - 📝 **Jede `todo`-Liste als Ziel**, auch pro Produkt (z. B. Drogerie auf eine eigene Liste).
 - ➕ **Duplikat-Schutz:** Trotzdem nochmal eintragen, überspringen oder Menge hochzählen (`2x Milch`).
@@ -65,7 +66,7 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 1. Der Scanner (ESPHome-Firmware v3) schickt den Code als Event `esphome.barcode_scanned` an Home Assistant.
 2. **Lokale Datenbank zuerst:** Bekannte Codes gehen sofort und ohne Internet auf die Liste.
 3. **Unbekannte EAN:** Abfrage bei den Datenquellen. Treffer werden automatisch lokal gespeichert, das System lernt also mit.
-4. **Gar nichts gefunden:** Der Code wartet unter **Unbekannte Scans** aufs Anlernen.
+4. **Gar nichts gefunden:** Der Code wartet unter **Unbekannte Scans** aufs Anlernen – oder du antwortest direkt auf die Push-Nachricht.
 5. Der Scanner piept und zeigt das Ergebnis an.
 
 Ändert sich mal eine API, reicht ein Update über den Marketplace. Der ESP muss nicht neu geflasht werden.
@@ -90,9 +91,25 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 | Text auf der Liste | Marke + Produkt | oder nur Produkt (Marke wird nie doppelt geschrieben) |
 | Open Food Facts / ean-suche.net | an | Datenquellen einzeln abschaltbar |
 | OpengtinDB-QueryID | leer | Eigene ID von <https://opengtindb.org/userid.php> |
-| Benachrichtigung | leer | z. B. `notify.mobile_app_mein_handy` |
+| Benachrichtigung | leer | z. B. `notify.mobile_app_mein_handy` (mit Direkt-Antwort, siehe unten) |
 | User-Agent | SHYSBarcodeScanner/1.0 … | Open Food Facts wünscht `AppName/Version (deine-mail@example.com)` |
 | ESPHome-Gerät für Rückmeldung | leer | Nur nötig, wenn das Event keinen Gerätenamen mitschickt |
+
+## Push-Nachricht mit Direkt-Antwort
+
+1. Home-Assistant-App (iOS oder Android) auf dem Handy einrichten.
+2. Unter *Entwicklerwerkzeuge → Aktionen* `notify.mobile_app` eintippen und den Namen deines Handys raussuchen, z. B. `notify.mobile_app_mein_handy`.
+3. *Geräte & Dienste → SHYS Barcode Scanner → Konfigurieren* → **Benachrichtigung** eintragen.
+
+Bei jedem neuen unbekannten Code kommt dann **„Unbekannter Barcode“** aufs Handy:
+
+| In der Nachricht | Was passiert |
+|---|---|
+| **Produkt benennen** | Textfeld direkt in der Benachrichtigung (iOS: lange drücken bzw. nach unten ziehen, Android: aufklappen). Produktname eintippen, absenden: Das Produkt wird in der lokalen Datenbank gespeichert und auf die Standard-Liste gesetzt (Duplikat-Einstellung gilt). Die Nachricht verschwindet danach. |
+| **Verwerfen** | Code aus *Unbekannte Scans* entfernen |
+| Auf die Nachricht tippen | Öffnet direkt das Panel **Barcode Scanner** |
+
+Technisch: Die Nachricht trägt den Tag `shys_barcode_<ean>` und eigene Aktionen `SHYS_REPLY_<ean>` / `SHYS_DISMISS_<ean>`. Die Integration reagiert nur auf diese, `REPLY`-Aktionen deiner anderen Automationen bleiben unberührt.
 
 ## Unterstützte Einkaufslisten (Bring!, Picnic & Co.)
 
