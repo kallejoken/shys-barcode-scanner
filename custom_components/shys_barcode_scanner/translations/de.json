@@ -44,7 +44,7 @@
           "use_eansuche": "Kostenlos, ca. 60 Abfragen pro Stunde.",
           "opengtindb_query_id": "Eigene ID von opengtindb.org/userid.php. Leer = aus.",
           "user_agent": "Open Food Facts wünscht „AppName/Version (deine-mail@example.com)“.",
-          "notify_service": "z. B. notify.mobile_app_mein_handy. Leer = keine.",
+          "notify_service": "z. B. notify.mobile_app_mein_handy. In der Home-Assistant-App kannst du direkt in der Benachrichtigung mit dem Produktnamen antworten. Leer = keine.",
           "esphome_device_prefix": "Nur nötig, wenn das Event keinen Gerätenamen mitschickt, z. B. barcode-scanner."
         }
       }
