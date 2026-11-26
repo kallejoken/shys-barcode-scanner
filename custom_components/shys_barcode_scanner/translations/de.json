@@ -34,7 +34,8 @@
           "use_eansuche": "ean-suche.net abfragen",
           "opengtindb_query_id": "OpengtinDB-QueryID (optional)",
           "user_agent": "User-Agent",
-          "notify_service": "Benachrichtigung bei unbekanntem Code (optional)",
+          "notify_services": "Handys für Benachrichtigungen (optional)",
+          "notify_only_home": "Nur an anwesende Personen senden",
           "esphome_device_prefix": "ESPHome-Gerät für Rückmeldung (optional)"
         },
         "data_description": {
@@ -44,14 +45,15 @@
           "use_eansuche": "Kostenlos, ca. 60 Abfragen pro Stunde.",
           "opengtindb_query_id": "Eigene ID von opengtindb.org/userid.php. Leer = aus.",
           "user_agent": "Open Food Facts wünscht „AppName/Version (deine-mail@example.com)“.",
-          "notify_service": "z. B. notify.mobile_app_mein_handy. In der Home-Assistant-App kannst du direkt in der Benachrichtigung mit dem Produktnamen antworten. Leer = keine.",
+          "notify_services": "Mehrfachauswahl der Home-Assistant-App und eigener Notify-Gruppen. Sobald jemand antwortet oder verwirft, verschwindet die Nachricht auf allen Handys.",
+          "notify_only_home": "Sendet die Push-Benachrichtigung nur an Handys, deren Person bzw. Gerät in Home Assistant als ‚Zuhause‘ erkannt wird.",
           "esphome_device_prefix": "Nur nötig, wenn das Event keinen Gerätenamen mitschickt, z. B. barcode-scanner."
         }
       }
     },
     "error": {
       "invalid_todo": "Bitte eine To-do-Liste (todo.*) wählen.",
-      "invalid_notify": "Der Dienst muss mit notify. beginnen."
+      "invalid_notify": "Jeder Dienst muss mit notify. beginnen."
     }
   },
   "selector": {
