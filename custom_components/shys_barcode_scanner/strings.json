@@ -44,7 +44,7 @@
           "use_eansuche": "Free, about 60 requests per hour.",
           "opengtindb_query_id": "Your own ID from opengtindb.org/userid.php. Empty = off.",
           "user_agent": "Open Food Facts asks for 'AppName/Version (your-mail@example.com)'.",
-          "notify_service": "e.g. notify.mobile_app_my_phone. Empty = none.",
+          "notify_service": "e.g. notify.mobile_app_my_phone. With the Home Assistant app you can reply with the product name directly in the notification. Empty = none.",
           "esphome_device_prefix": "Only needed if the event has no device name, e.g. barcode-scanner."
         }
       }

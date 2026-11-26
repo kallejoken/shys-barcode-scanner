@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "shys_barcode_scanner"
 NAME: Final = "SHYS Barcode Scanner"
-VERSION: Final = "1.0.0"
+VERSION: Final = "1.1.0"
 
 # Lokale Datenbank (HA-Store unter <config>/.storage/shys_barcode_scanner)
 STORAGE_KEY: Final = DOMAIN
@@ -16,6 +16,15 @@ STORAGE_VERSION: Final = 1
 EVENT_BARCODE_SCANNED: Final = "esphome.barcode_scanned"
 # Event, das die Integration nach jeder Verarbeitung feuert (für Automationen)
 EVENT_SCAN_PROCESSED: Final = f"{DOMAIN}_scan_processed"
+
+# Actionable Notifications der Home-Assistant-App (iOS + Android)
+EVENT_NOTIFICATION_ACTION: Final = "mobile_app_notification_action"
+NOTIFY_TAG_PREFIX: Final = "shys_barcode_"
+# Eigene Aktions-IDs mit EAN -> kein Konflikt mit REPLY-Aktionen anderer Automationen.
+# behavior: textInput öffnet das Textfeld auf iOS UND Android (Companion-Doku).
+NOTIFY_ACTION_REPLY_PREFIX: Final = "SHYS_REPLY_"
+NOTIFY_ACTION_DISMISS_PREFIX: Final = "SHYS_DISMISS_"
+NOTIFY_ACTION_REPLY_GENERIC: Final = "REPLY"
 
 # Dispatcher-Signal für Sensoren
 SIGNAL_UPDATE: Final = f"{DOMAIN}_update"
@@ -82,6 +91,7 @@ SOURCE_EANSUCHE: Final = "ean-suche"
 SOURCE_OPENGTINDB: Final = "opengtindb"
 SOURCE_MANUAL: Final = "manual"
 SOURCE_IMPORT: Final = "import"
+SOURCE_NOTIFICATION: Final = "notification"
 
 # Scan-Status (geht auch an die ESPHome-Aktion show_result)
 STATUS_OK: Final = "ok"
