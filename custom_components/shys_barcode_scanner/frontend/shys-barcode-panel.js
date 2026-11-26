@@ -13,6 +13,7 @@ const SOURCE_LABELS = {
   "ean-suche": "ean-suche.net",
   opengtindb: "OpengtinDB",
   manual: "Eigener Eintrag",
+  notification: "Push-Antwort",
   import: "Import",
 };
 const STATUS_LABELS = {
