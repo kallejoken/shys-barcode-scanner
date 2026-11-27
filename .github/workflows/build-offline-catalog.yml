@@ -1,0 +1,87 @@
+name: Offline-Katalog bauen
+
+# Baut den deutschen Offline-Produktkatalog aus den vier ODbL-Datenbanken
+# (Open Food Facts, Open Beauty Facts, Open Products Facts, Open Pet Food Facts)
+# und veröffentlicht ihn als Assets im festen Release-Tag "offline-catalog-de".
+
+on:
+  schedule:
+    - cron: "0 3 1 * *" # monatlich am 1. um 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: offline-catalog
+  cancel-in-progress: false
+
+env:
+  TAG: offline-catalog-de
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Katalog bauen (Streaming, nur Standardbibliothek)
+        run: python3 scripts/build_offline_catalog.py --out dist/catalog
+
+      - name: Ergebnis prüfen
+        run: |
+          ls -la dist/catalog
+          python3 - <<'PY'
+          import json, sys
+          m = json.load(open("dist/catalog/catalog-de-manifest.json", encoding="utf-8"))
+          cats = m["categories"]
+          assert set(cats) == {"food", "beauty", "products", "petfood"}, cats.keys()
+          for key, c in cats.items():
+              print(f"{key:9s} {c['count']:>8d} Produkte  {c['size_bytes'] / 1e6:6.2f} MB")
+          if cats["food"]["count"] < 50000:
+              sys.exit("Unplausibel wenige Lebensmittel – Release wird nicht aktualisiert.")
+          PY
+
+      - name: Release-Text erzeugen
+        run: |
+          python3 - <<'PY'
+          import json
+          m = json.load(open("dist/catalog/catalog-de-manifest.json", encoding="utf-8"))
+          rows = "\n".join(
+              f"| {c['label_de']} | {c['source']} | {c['count']:,} | {c['size_bytes'] / 1048576:.1f} MB |".replace(",", ".")
+              for c in m["categories"].values()
+          )
+          text = f"""Deutscher Offline-Produktkatalog für die Home-Assistant-Integration **SHYS Barcode Scanner** (ab v1.4.0).
+
+          Stand: `{m['generated_at']}` – automatisch monatlich neu gebaut.
+
+          | Kategorie | Quelle | Produkte | Download |
+          |---|---|---:|---:|
+          {rows}
+
+          Laden und Aktualisieren direkt im Seitenleisten-Panel unter **Offline-Katalog**.
+
+          **Lizenz:** Die Daten stammen aus Open Food Facts, Open Beauty Facts, Open Products Facts und Open Pet Food Facts
+          und stehen unter der [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
+          Weitergabe und Bearbeitung nur unter ODbL mit Quellenangabe.
+          """
+          open("dist/release-notes.md", "w", encoding="utf-8").write("\n".join(l.strip() if l.startswith("          ") else l for l in text.splitlines()) + "\n")
+          PY
+
+      - name: Release offline-catalog-de anlegen oder aktualisieren
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "Offline-Katalog (Deutschland)" --notes-file dist/release-notes.md --prerelease --latest=false
+          else
+            # Als Pre-Release und nie "latest": HACS / Marketplace-Updates bleiben bei den echten Versionen.
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Offline-Katalog (Deutschland)" \
+              --notes-file dist/release-notes.md --prerelease --latest=false
+          fi
+          gh release upload "$TAG" dist/catalog/catalog-de-*.tsv.gz dist/catalog/catalog-de-manifest.json --clobber
