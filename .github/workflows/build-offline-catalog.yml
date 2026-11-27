@@ -66,9 +66,7 @@ jobs:
 
           Laden und Aktualisieren direkt im Seitenleisten-Panel unter **Offline-Katalog**.
 
-          **Lizenz:** Die Daten stammen aus Open Food Facts, Open Beauty Facts, Open Products Facts und Open Pet Food Facts
-          und stehen unter der [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/1-0/).
-          Weitergabe und Bearbeitung nur unter ODbL mit Quellenangabe.
+          **Lizenz & Quellenangabe:** Diese Katalogdateien enthalten gefilterte Daten aus [Open Food Facts](https://world.openfoodfacts.org), [Open Beauty Facts](https://world.openbeautyfacts.org), [Open Products Facts](https://world.openproductsfacts.org) und [Open Pet Food Facts](https://world.openpetfoodfacts.org). Sie stehen als abgeleitete Datenbank unter der [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/) (Einzelinhalte: [DbCL 1.0](https://opendatacommons.org/licenses/dbcl/1-0/)). Weitergabe und Bearbeitung der Katalogdateien nur unter ODbL 1.0 mit Quellenangabe. Der Quellcode der Integration steht separat unter der MIT-Lizenz.
           """
           open("dist/release-notes.md", "w", encoding="utf-8").write("\n".join(l.strip() if l.startswith("          ") else l for l in text.splitlines()) + "\n")
           PY
