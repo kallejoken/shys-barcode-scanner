@@ -27,6 +27,7 @@
         "title": "Barcode Scanner – Optionen",
         "data": {
           "todo_entity": "Standard-Liste",
+          "quick_lists": "Zusätzliche Schnell-Listen für Push-Antworten (optional)",
           "duplicate_mode": "Schon auf der Liste",
           "unknown_mode": "Unbekannte Codes",
           "name_format": "Text auf der Liste",
@@ -36,10 +37,12 @@
           "user_agent": "User-Agent",
           "notify_services": "Handys für Benachrichtigungen (optional)",
           "notify_only_home": "Nur an anwesende Personen senden",
+          "notify_on_success": "Kurze Erfolgs-Nachricht mit Rückgängig-Button",
           "esphome_device_prefix": "ESPHome-Gerät für Rückmeldung (optional)"
         },
         "data_description": {
           "todo_entity": "To-do-Liste für gescannte Produkte, z. B. Einkaufsliste oder Picnic-Warenkorb.",
+          "quick_lists": "Wenn mindestens eine weitere Liste gewählt ist, erscheinen in der Unbekannt-Nachricht zwei Antwort-Buttons (Standard-Liste und erste Zusatz-Liste) plus „Verwerfen“. In der Antwort kannst du außerdem @Listenname anhängen.",
           "duplicate_mode": "Was passiert, wenn das Produkt schon offen auf der Liste steht.",
           "unknown_mode": "Unbekannte Codes landen immer in „Unbekannte Scans“ im Panel.",
           "use_eansuche": "Kostenlos, ca. 60 Abfragen pro Stunde.",
@@ -47,6 +50,7 @@
           "user_agent": "Open Food Facts wünscht „AppName/Version (deine-mail@example.com)“.",
           "notify_services": "Mehrfachauswahl der Home-Assistant-App und eigener Notify-Gruppen. Sobald jemand antwortet oder verwirft, verschwindet die Nachricht auf allen Handys.",
           "notify_only_home": "Sendet die Push-Benachrichtigung nur an Handys, deren Person bzw. Gerät in Home Assistant als ‚Zuhause‘ erkannt wird.",
+          "notify_on_success": "Sendet nach einem bekannten Scan eine kurze Push-Nachricht mit einem Button, um den Eintrag wieder von der Liste zu nehmen. Standardmäßig aus, damit bekannte Scans nicht stören.",
           "esphome_device_prefix": "Nur nötig, wenn das Event keinen Gerätenamen mitschickt, z. B. barcode-scanner."
         }
       }

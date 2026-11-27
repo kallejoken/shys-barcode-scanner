@@ -27,6 +27,7 @@
         "title": "Barcode Scanner options",
         "data": {
           "todo_entity": "Default list",
+          "quick_lists": "Additional quick lists for push replies (optional)",
           "duplicate_mode": "Already on the list",
           "unknown_mode": "Unknown codes",
           "name_format": "Text on the list",
@@ -36,10 +37,12 @@
           "user_agent": "User agent",
           "notify_services": "Phones to notify (optional)",
           "notify_only_home": "Only notify people who are home",
+          "notify_on_success": "Short success notification with undo button",
           "esphome_device_prefix": "ESPHome device for feedback (optional)"
         },
         "data_description": {
           "todo_entity": "To-do list for scanned products, e.g. shopping list or Picnic cart.",
+          "quick_lists": "If at least one extra list is selected, the unknown-code notification shows two reply buttons (default list and the first extra list) plus Dismiss. You can also append @ListName in the reply text.",
           "duplicate_mode": "What happens if the product is already open on the list.",
           "unknown_mode": "Unknown codes always end up in 'Unknown scans' in the panel.",
           "use_eansuche": "Free, about 60 requests per hour.",
@@ -47,6 +50,7 @@
           "user_agent": "Open Food Facts asks for 'AppName/Version (your-mail@example.com)'.",
           "notify_services": "Select one or more Home Assistant companion apps or notify groups. When someone replies or dismisses, the notification is cleared on all phones.",
           "notify_only_home": "Sends the push notification only to phones whose person or device is detected as 'home' in Home Assistant.",
+          "notify_on_success": "After a known product is added, send a short push notification with a button to take the item off the list again. Off by default so familiar scans stay quiet.",
           "esphome_device_prefix": "Only needed if the event has no device name, e.g. barcode-scanner."
         }
       }
