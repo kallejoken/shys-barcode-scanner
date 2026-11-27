@@ -54,7 +54,7 @@ class ShysBarcodePanel extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this._hass = null;
     this._narrow = false;
-    this._data = { products: [], pending: [], last_result: null, todo_entity: "" };
+    this._data = { products: [], pending: [], last_result: null, last_undoable_scan: null, todo_entity: "" };
     this._tab = "pending";
     this._search = "";
     this._editing = null;
@@ -62,6 +62,7 @@ class ShysBarcodePanel extends HTMLElement {
     this._loaded = false;
     this._loading = false;
     this._stamp = "";
+    this._settings = null;
   }
 
   set hass(hass) {
@@ -179,6 +180,11 @@ class ShysBarcodePanel extends HTMLElement {
         label.check { display: flex; gap: 6px; align-items: center; font-size: 14px; }
         label.check input { width: auto; accent-color: var(--shys-blau); }
         .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; }
+        .field { margin: 10px 0; }
+        .field > .lab { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+        .checklist { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+        .checklist label.check { align-items: flex-start; }
+        .checklist .sub { display: block; font-size: 12px; color: var(--secondary-text-color); font-family: monospace; }
         @media (max-width: 600px) { .product { grid-template-columns: 1fr; } .actions { justify-content: flex-start; } .subtitle { display: none; } }
       </style>
       <div class="toolbar"><span id="menu"></span>${LOGO_SVG}
@@ -227,6 +233,7 @@ class ShysBarcodePanel extends HTMLElement {
       ["pending", `Unbekannte Scans${pendingCount ? `<span class="badge">${pendingCount}</span>` : ""}`],
       ["products", `Produktdatenbank (${(this._data.products || []).length})`],
       ["tools", "Test &amp; Backup"],
+      ["settings", "Einstellungen"],
     ];
     let html = "";
     if (this._message) html += `<div class="msg ${this._message.error ? "error" : ""}">${esc(this._message.text)}</div>`;
@@ -236,6 +243,7 @@ class ShysBarcodePanel extends HTMLElement {
     if (!this._loaded) html += `<div class="card empty">Lade …</div>`;
     else if (this._tab === "pending") html += this._renderPending();
     else if (this._tab === "products") html += this._renderProducts();
+    else if (this._tab === "settings") html += this._renderSettings();
     else html += this._renderTools();
     content.innerHTML = html;
 
@@ -261,9 +269,19 @@ class ShysBarcodePanel extends HTMLElement {
   _renderLast() {
     const r = this._data.last_result;
     if (!r) return "";
+    const undo = this._data.last_undoable_scan;
+    const canUndo = !!(
+      undo && r && undo.ean === r.ean && (r.action === "added" || r.action === "incremented")
+    );
+    const statusLabel = r.action === "undone" ? "Rückgängig gemacht" : (STATUS_LABELS[r.status] || r.status);
+    const highlight = r.status !== "ok" || r.action === "undone";
+    const undoBtn = canUndo
+      ? `<button class="btn secondary" data-action="undo" data-undo-id="${esc(undo.undo_id)}">Rückgängig</button>`
+      : "";
     return `<div class="card"><div class="muted">Letzter Scan · ${esc(fmtDate(r.timestamp))}</div>
       <div class="row" style="margin-top:6px"><span class="code">${esc(r.ean)}</span>
-      <span class="grow">${esc(r.name || "")}</span><span class="src ${r.status === "ok" ? "" : "hl"}">${esc(STATUS_LABELS[r.status] || r.status)}</span></div></div>`;
+      <span class="grow">${esc(r.name || "")}</span><span class="src ${highlight ? "hl" : ""}">${esc(statusLabel)}</span>
+      ${undoBtn}</div></div>`;
   }
 
   _renderPending() {
@@ -342,6 +360,138 @@ class ShysBarcodePanel extends HTMLElement {
     return html + `</div>`;
   }
 
+  get _isAdmin() {
+    return !!(this._hass && this._hass.user && this._hass.user.is_admin);
+  }
+
+  async _loadSettings(force = false) {
+    if (this._settings && !force) return;
+    try {
+      this._settings = await this._ws("get_settings");
+    } catch (err) {
+      this._flash(`Einstellungen konnten nicht geladen werden: ${err.message || err}`, true);
+    }
+  }
+
+  _selectOptions(options, selected) {
+    return options
+      .map(([value, label]) => `<option value="${esc(value)}" ${value === selected ? "selected" : ""}>${esc(label)}</option>`)
+      .join("");
+  }
+
+  _notifyLabel(service) {
+    const name = String(service || "").startsWith("notify.") ? service.slice(7) : String(service || "");
+    if (name.startsWith("mobile_app_")) return `Handy · ${name.slice(11).replace(/_/g, " ")}`;
+    return name.replace(/_/g, " ") || service;
+  }
+
+  _collectSettings() {
+    const quick = [];
+    const notify = [];
+    this.shadowRoot.querySelectorAll("[data-quick]").forEach((el) => {
+      if (el.checked) quick.push(el.dataset.quick);
+    });
+    this.shadowRoot.querySelectorAll("[data-notify]").forEach((el) => {
+      if (el.checked) notify.push(el.dataset.notify);
+    });
+    const custom = this._val("notify-custom");
+    if (custom) {
+      for (const part of custom.split(/[\s,;]+/)) {
+        if (part) notify.push(part);
+      }
+    }
+    return {
+      todo_entity: this._val("set-todo"),
+      quick_lists: quick,
+      duplicate_mode: this._val("set-duplicate"),
+      unknown_mode: this._val("set-unknown"),
+      name_format: this._val("set-format"),
+      notify_services: notify,
+      notify_only_home: !!this._val("set-only-home"),
+      notify_on_success: !!this._val("set-on-success"),
+      use_openfoodfacts: !!this._val("set-off"),
+      use_eansuche: !!this._val("set-eansuche"),
+      opengtindb_query_id: this._val("set-opengtindb"),
+      user_agent: this._val("set-user-agent"),
+      esphome_device_prefix: this._val("set-esphome"),
+    };
+  }
+
+  _renderSettings() {
+    if (!this._settings) return `<div class="card empty">Lade Einstellungen …</div>`;
+    const s = this._settings.settings || {};
+    const todos = this._settings.available_todo_lists || [];
+    const notifies = this._settings.available_notify_services || [];
+    const disabled = this._isAdmin ? "" : "disabled";
+    const todoOptions = todos.length
+      ? todos.map((t) => `<option value="${esc(t.entity_id)}" ${t.entity_id === s.todo_entity ? "selected" : ""}>${esc(t.name)}</option>`).join("")
+      : `<option value="${esc(s.todo_entity || "")}" selected>${esc(s.todo_entity || "")}</option>`;
+    const selectedQuick = new Set(s.quick_lists || []);
+    const selectedNotify = new Set(s.notify_services || []);
+    const quickBoxes = todos.length
+      ? todos.map((t) => {
+          const checked = selectedQuick.has(t.entity_id) ? "checked" : "";
+          return `<label class="check"><input type="checkbox" data-key="quick-${esc(t.entity_id)}" data-quick="${esc(t.entity_id)}" ${checked} ${disabled} /><span>${esc(t.name)}<span class="sub">${esc(t.entity_id)}</span></span></label>`;
+        }).join("")
+      : `<div class="muted">Keine To-do-Listen gefunden. Lege zuerst eine Einkaufsliste in Home Assistant an.</div>`;
+    const notifyBoxes = notifies.length
+      ? notifies.map((svc) => {
+          const checked = selectedNotify.has(svc) ? "checked" : "";
+          return `<label class="check"><input type="checkbox" data-key="nfy-${esc(svc)}" data-notify="${esc(svc)}" ${checked} ${disabled} /><span>${esc(this._notifyLabel(svc))}<span class="sub">${esc(svc)}</span></span></label>`;
+        }).join("")
+      : `<div class="muted">Kein Notify-Dienst gefunden. Die Home-Assistant-App erscheint hier, sobald sie eingerichtet ist.</div>`;
+    const adminNote = this._isAdmin
+      ? ""
+      : `<div class="muted" style="margin-bottom:12px">Einstellungen dürfen nur Administratoren ändern. Du siehst hier den aktuellen Stand.</div>`;
+    return `${adminNote}
+      <div class="card"><h2>Einkaufsliste &amp; Verhalten</h2>
+        <div class="field"><label class="lab" for="set-todo">Standard-Einkaufsliste</label>
+          <select id="set-todo" data-key="set-todo" ${disabled}>${todoOptions}</select></div>
+        <div class="field"><span class="lab">Zusätzliche Schnell-Listen für Push-Antworten</span>
+          <div class="muted">Wenn mindestens eine weitere Liste gewählt ist, erscheinen in der Unbekannt-Nachricht zwei Antwort-Buttons.</div>
+          <div class="checklist">${quickBoxes}</div></div>
+        <div class="field"><label class="lab" for="set-duplicate">Schon auf der Liste</label>
+          <select id="set-duplicate" data-key="set-duplicate" ${disabled}>${this._selectOptions([
+            ["increment", "Menge hochzählen (2x, 3x …)"],
+            ["skip", "Nicht nochmal eintragen"],
+            ["allow", "Trotzdem nochmal eintragen"],
+          ], s.duplicate_mode)}</select></div>
+        <div class="field"><label class="lab" for="set-unknown">Unbekannte Codes</label>
+          <select id="set-unknown" data-key="set-unknown" ${disabled}>${this._selectOptions([
+            ["pending_only", "Nur zum Anlernen merken"],
+            ["add_ean_and_pending", "Code auf die Liste setzen und merken"],
+          ], s.unknown_mode)}</select></div>
+        <div class="field"><label class="lab" for="set-format">Text auf der Liste</label>
+          <select id="set-format" data-key="set-format" ${disabled}>${this._selectOptions([
+            ["brand_product", "Marke + Produkt"],
+            ["product_only", "Nur Produkt"],
+          ], s.name_format)}</select></div>
+      </div>
+      <div class="card"><h2>Push-Benachrichtigungen</h2>
+        <div class="field"><span class="lab">Handys für Benachrichtigungen</span>
+          <div class="checklist">${notifyBoxes}</div></div>
+        <div class="field"><label class="lab" for="notify-custom">Eigener Notify-Dienst (optional)</label>
+          <input id="notify-custom" type="text" data-key="notify-custom" placeholder="z. B. notify.familie" ${disabled} />
+          <div class="muted">Für eigene Notify-Gruppen. Mehrere Angaben mit Komma oder Leerzeichen trennen.</div></div>
+        <div class="field"><label class="check"><input type="checkbox" data-key="set-only-home" ${s.notify_only_home ? "checked" : ""} ${disabled} /><span>Nur an anwesende Personen senden</span></label></div>
+        <div class="field"><label class="check"><input type="checkbox" data-key="set-on-success" ${s.notify_on_success ? "checked" : ""} ${disabled} /><span>Kurze Erfolgs-Push mit Rückgängig-Button</span></label></div>
+        <div class="row"><button class="btn secondary" data-action="test-push" ${disabled}>Test-Push senden</button></div>
+      </div>
+      <div class="card"><h2>Produkt-Quellen &amp; Scanner</h2>
+        <div class="field"><label class="check"><input type="checkbox" data-key="set-off" ${s.use_openfoodfacts ? "checked" : ""} ${disabled} /><span>Open Food Facts abfragen</span></label></div>
+        <div class="field"><label class="check"><input type="checkbox" data-key="set-eansuche" ${s.use_eansuche ? "checked" : ""} ${disabled} /><span>ean-suche.net abfragen</span></label></div>
+        <div class="field"><label class="lab" for="set-opengtindb">OpengtinDB-QueryID (optional)</label>
+          <input id="set-opengtindb" type="text" data-key="set-opengtindb" value="${esc(s.opengtindb_query_id || "")}" placeholder="leer = aus" ${disabled} /></div>
+        <div class="field"><label class="lab" for="set-user-agent">User-Agent</label>
+          <input id="set-user-agent" type="text" data-key="set-user-agent" value="${esc(s.user_agent || "")}" ${disabled} /></div>
+        <div class="field"><label class="lab" for="set-esphome">ESPHome-Gerät für Rückmeldung (optional)</label>
+          <input id="set-esphome" type="text" data-key="set-esphome" value="${esc(s.esphome_device_prefix || "")}" placeholder="z. B. barcode-scanner" ${disabled} /></div>
+      </div>
+      <div class="card">
+        <div class="row"><button class="btn" data-action="save-settings" ${disabled}>Einstellungen speichern</button></div>
+      </div>`;
+  }
+
   _renderTools() {
     return `${this._renderLast()}
       <div class="card"><h2>Test-Scan</h2>
@@ -395,8 +545,37 @@ class ShysBarcodePanel extends HTMLElement {
         case "tab":
           this._tab = btn.dataset.tab;
           this._editing = null;
+          if (this._tab === "settings") await this._loadSettings();
           this._renderContent();
           return;
+        case "save-settings": {
+          if (!this._isAdmin) return this._flash("Einstellungen dürfen nur Administratoren ändern.", true);
+          btn.disabled = true;
+          const saved = await this._ws("save_settings", { settings: this._collectSettings() });
+          this._settings = saved;
+          const custom = this.shadowRoot.querySelector('[data-key="notify-custom"]');
+          if (custom) custom.value = "";
+          this._flash("Einstellungen gespeichert.");
+          break;
+        }
+        case "test-push": {
+          if (!this._isAdmin) return this._flash("Den Test-Push dürfen nur Administratoren senden.", true);
+          btn.disabled = true;
+          const res = await this._ws("test_push", { notify_services: this._collectSettings().notify_services });
+          if (res && res.ok) {
+            const names = (res.sent || []).join(", ");
+            this._flash(names ? `Test-Push gesendet an ${names}.` : "Test-Push gesendet.");
+          } else if (res && res.reason === "no_services") {
+            this._flash("Bitte zuerst mindestens ein Handy oder einen Notify-Dienst wählen.", true);
+          } else {
+            const details = (res && res.errors || []).map((e) => `${e.service}: ${e.error}`).join(" · ");
+            const partial = res && res.sent && res.sent.length
+              ? `Gesendet an ${res.sent.join(", ")}. Fehler: ${details}`
+              : (details || "Test-Push fehlgeschlagen.");
+            this._flash(partial, true);
+          }
+          break;
+        }
         case "learn-pending":
         case "learn-pending-only": {
           const name = this._val(`pname-${ean}`);
@@ -410,6 +589,14 @@ class ShysBarcodePanel extends HTMLElement {
             add_to_list: action === "learn-pending",
           });
           this._flash(action === "learn-pending" ? `„${name}“ gespeichert und auf die Liste gesetzt.` : `„${name}“ gespeichert.`);
+          break;
+        }
+        case "undo": {
+          btn.disabled = true;
+          const res = await this._ws("undo_scan", { undo_id: btn.dataset.undoId || null });
+          if (res && res.already_undone) this._flash("Der Eintrag war bereits rückgängig gemacht.");
+          else if (res && res.ok) this._flash("Von der Liste entfernt.");
+          else this._flash((res && res.error) ? `Rückgängig fehlgeschlagen: ${res.error}` : "Rückgängig nicht möglich.", true);
           break;
         }
         case "dismiss":
