@@ -130,7 +130,7 @@ Ab Version 1.4.0 kannst du einen kompletten deutschen Produktkatalog direkt in H
 
 Selbst bauen (z. B. für einen eigenen Spiegel): `python3 scripts/build_offline_catalog.py --out dist/catalog` – nur Python-Standardbibliothek, die Exporte werden gestreamt und nicht auf der Platte zwischengespeichert.
 
-**Lizenz & Quellenangabe:** Die Katalogdaten stammen aus Open Food Facts, Open Beauty Facts, Open Products Facts und Open Pet Food Facts und stehen unter der [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/). Der daraus abgeleitete Katalog wird ebenfalls unter ODbL weitergegeben.
+**Lizenz & Quellenangabe:** Die Katalogdaten enthalten Informationen aus [Open Food Facts](https://world.openfoodfacts.org), [Open Beauty Facts](https://world.openbeautyfacts.org), [Open Products Facts](https://world.openproductsfacts.org) und [Open Pet Food Facts](https://world.openpetfoodfacts.org) (Datenbank: [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/), Einzelinhalte: [Database Contents License (DbCL) 1.0](https://opendatacommons.org/licenses/dbcl/1-0/)). Die abgeleiteten Offline-Katalogdateien werden ebenfalls unter ODbL 1.0 weitergegeben (Share-Alike gilt ausschließlich für die Katalogdateien; der Quellcode der Integration steht unter der [MIT-Lizenz](LICENSE)).
 
 ## Push-Nachricht mit Direkt-Antwort
 
