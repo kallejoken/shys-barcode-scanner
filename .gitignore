@@ -4,3 +4,7 @@ __pycache__/
 .venv/
 _test-logs/
 .ruff_cache/
+dist/
+*.db
+*.db-wal
+*.db-shm

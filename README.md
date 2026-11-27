@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://www.home-assistant.io/integrations/marketplace/"><img src="https://img.shields.io/badge/HA%20Marketplace-Custom-F9B013.svg?style=for-the-badge&labelColor=002039" alt="Home Assistant Marketplace"></a>
-  <a href="https://github.com/kallejoken/shys-barcode-scanner/releases"><img src="https://img.shields.io/badge/Version-1.3.0-00AEE7.svg?style=for-the-badge&labelColor=002039" alt="Version 1.3.0"></a>
+  <a href="https://github.com/kallejoken/shys-barcode-scanner/releases"><img src="https://img.shields.io/badge/Version-1.4.0-00AEE7.svg?style=for-the-badge&labelColor=002039" alt="Version 1.4.0"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2024.12%2B-2E6EB4.svg?style=for-the-badge&labelColor=002039" alt="Home Assistant 2024.12+">
 </p>
 
@@ -51,7 +51,8 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 ## Das kann die Integration
 
 - 🧠 **Selbstlernende lokale Datenbank:** Jeder Treffer wird gespeichert. Ab dem zweiten Scan läuft das Produkt komplett offline und mit deinem eigenen Namen.
-- 🔎 **Automatische Produktsuche:** Open Food Facts → ean-suche.net → optional OpengtinDB. Einzeln abschaltbar.
+- 🇩🇪 **Deutscher Offline-Katalog (neu in 1.4.0):** Rund 380.000 in Deutschland erhältliche Produkte (Lebensmittel, Drogerie, Haushalt, Tierfutter) per Klick lokal in Home Assistant laden – Scans werden danach in unter 1 ms **ohne Internet** erkannt.
+- 🔎 **Automatische Produktsuche:** Offline-Katalog → Open Food Facts → ean-suche.net → optional OpengtinDB. Einzeln abschaltbar.
 - ✍️ **Anlern-Modus:** Unbekannte Codes landen in der Seitenleiste unter *Unbekannte Scans*. Name eintippen, fertig.
 - 📲 **Direkt-Antwort per Push:** Unbekannter Code? Die Home-Assistant-App meldet sich, du tippst den Produktnamen direkt in die Benachrichtigung – gespeichert und auf der Liste, ohne die App zu öffnen. Funktioniert auf iOS und Android.
 - 👨‍👩‍👧 **Mehrere Handys (seit 1.2.0):** Beliebig viele `notify.mobile_app_*`-Dienste auswählen. Sobald jemand antwortet oder verwirft, verschwindet die Nachricht auf allen Handys. Optional nur an Personen senden, die Home Assistant als *Zuhause* erkennt.
@@ -62,15 +63,16 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 - ➕ **Duplikat-Schutz:** Trotzdem nochmal eintragen, überspringen oder Menge hochzählen (`2x Milch`).
 - 🔔 **Rückmeldung an den Scanner:** Produktname aufs OLED und passender Piep-Ton (gefunden / unbekannt / Fehler).
 - 📊 **Sensoren, Aktionen & Event** für eigene Automationen und Dashboards.
-- 💾 **Im HA-Backup enthalten:** Die Datenbank liegt in `<config>/.storage/shys_barcode_scanner`.
+- 💾 **Im HA-Backup enthalten:** Die Datenbank liegt in `<config>/.storage/shys_barcode_scanner`. Der Offline-Katalog liegt getrennt in `<config>/shys_barcode_scanner_catalog.db` und lässt sich jederzeit neu laden.
 
 ## So läuft ein Scan ab
 
 1. Der Scanner (ESPHome-Firmware v3) schickt den Code als Event `esphome.barcode_scanned` an Home Assistant.
-2. **Lokale Datenbank zuerst:** Bekannte Codes gehen sofort und ohne Internet auf die Liste.
-3. **Unbekannte EAN:** Abfrage bei den Datenquellen. Treffer werden automatisch lokal gespeichert, das System lernt also mit.
-4. **Gar nichts gefunden:** Der Code wartet unter **Unbekannte Scans** aufs Anlernen – oder du antwortest direkt auf die Push-Nachricht.
-5. Der Scanner piept und zeigt das Ergebnis an.
+2. **Eigene Produktdatenbank zuerst:** Bekannte Codes gehen sofort und ohne Internet auf die Liste – eigene bzw. angelernte Namen haben immer Vorrang.
+3. **Offline-Katalog:** Ist der deutsche Offline-Katalog geladen, wird die EAN dort lokal nachgeschlagen (< 1 ms, kein Internet). Nur der gescannte Artikel wird in deine Produktdatenbank übernommen (Quelle *Offline-Katalog*), damit du ihn dort umbenennen oder einer eigenen Liste zuordnen kannst.
+4. **Online-APIs:** Nur wenn der Offline-Katalog nichts kennt (und die APIs eingeschaltet sind). Treffer werden ebenfalls lokal gespeichert, das System lernt also mit.
+5. **Gar nichts gefunden:** Der Code wartet unter **Unbekannte Scans** aufs Anlernen – oder du antwortest direkt auf die Push-Nachricht.
+6. Der Scanner piept und zeigt das Ergebnis an.
 
 Ändert sich mal eine API, reicht ein Update über den Marketplace. Der ESP muss nicht neu geflasht werden.
 
@@ -81,6 +83,7 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 | Unbekannte Scans | Letzten Scan inkl. **Rückgängig**, Namen für unbekannte Codes vergeben („Speichern & auf Liste“) oder verwerfen |
 | Produktdatenbank | Suchen, umbenennen, löschen, eigene Codes für lose Ware/QR-Sticker anlegen, Ziel-Liste pro Produkt |
 | Test & Backup | Test-Scan ohne Scanner, JSON-Export und -Import |
+| Offline-Katalog | Deutschen Offline-Katalog per Kategorie laden, aktualisieren, löschen und offline darin suchen („Auf Einkaufsliste“ / „In eigene DB übernehmen“) |
 | Einstellungen | Alle Integrations-Optionen inkl. Push-Handys und **Test-Push** – derselbe Datenstand wie unter *Konfigurieren* |
 
 ## Optionen (alles optional)
@@ -94,13 +97,40 @@ Die Einstellungen erreichst du direkt im Panel unter **Einstellungen** (inkl. ei
 | Schon auf der Liste | Menge hochzählen | `Trotzdem nochmal` / `Nicht nochmal` / `2x, 3x …` |
 | Unbekannte Codes | Nur zum Anlernen merken | Optional zusätzlich den Code auf die Liste setzen |
 | Text auf der Liste | Marke + Produkt | oder nur Produkt (Marke wird nie doppelt geschrieben) |
-| Open Food Facts / ean-suche.net | an | Datenquellen einzeln abschaltbar |
+| Lokalen Offline-Katalog nutzen | an | Scans zuerst im heruntergeladenen deutschen Offline-Katalog suchen |
+| Open Food Facts / ean-suche.net | an | Online-Datenquellen einzeln abschaltbar |
 | OpengtinDB-QueryID | leer | Eigene ID von <https://opengtindb.org/userid.php> |
 | Handys für Benachrichtigungen | leer | Mehrfachauswahl, z. B. `notify.mobile_app_mein_handy` und `notify.mobile_app_pixel_frau` (mit Direkt-Antwort, siehe unten) |
 | Nur an anwesende Personen senden | aus | Push nur an Handys, deren Person bzw. Gerät als *Zuhause* erkannt wird |
 | Kurze Erfolgs-Nachricht mit Rückgängig-Button | aus | Nach einem bekannten Scan eine kurze Push mit **Rückgängig** senden (respektiert den Anwesenheitsfilter) |
 | User-Agent | SHYSBarcodeScanner/1.0 … | Open Food Facts wünscht `AppName/Version (deine-mail@example.com)` |
 | ESPHome-Gerät für Rückmeldung | leer | Nur nötig, wenn das Event keinen Gerätenamen mitschickt |
+| Adresse des Offline-Katalogs | leer (= GitHub-Release `offline-catalog-de`) | Nur nötig, wenn der Katalog woanders gehostet wird |
+
+## Deutscher Offline-Katalog (100 % unabhängig von APIs)
+
+Ab Version 1.4.0 kannst du einen kompletten deutschen Produktkatalog direkt in Home Assistant ablegen. Danach erkennt der Scanner bekannte Markenprodukte **ohne Internet, ohne API-Limits und in unter einer Millisekunde**.
+
+**So geht's:** Seitenleiste → **Barcode Scanner** → Tab **Offline-Katalog** → Kategorien anhaken → **Katalog laden**. Fertig.
+
+| Kategorie | Quelle | Produkte* | Download* |
+|---|---|---:|---:|
+| Lebensmittel & Getränke | [Open Food Facts](https://world.openfoodfacts.org) | ca. 372.000 | ca. 5,2 MB |
+| Drogerie & Kosmetik | [Open Beauty Facts](https://world.openbeautyfacts.org) | ca. 6.500 | ca. 0,1 MB |
+| Haushalt & Alltag | [Open Products Facts](https://world.openproductsfacts.org) | ca. 4.000 | ca. 0,1 MB |
+| Tierfutter | [Open Pet Food Facts](https://world.openpetfoodfacts.org) | ca. 1.400 | < 0,1 MB |
+
+\* Stand November 2026. Alle vier Kategorien zusammen belegen als SQLite-Datei rund 21 MB.
+
+- **Nur deutsche Produkte:** Übernommen werden nur Einträge, die in den Datenbanken als in Deutschland erhältlich markiert sind (`en:germany`), mit gültiger EAN-8/EAN-13 (Prüfziffer geprüft) und einem echten Produktnamen. Gespeichert werden nur EAN, Marke und Name – keine Bilder, Nährwerte oder Zutaten.
+- **Getrennt von deiner Datenbank:** Der Katalog liegt als eigene SQLite-Datei unter `<config>/shys_barcode_scanner_catalog.db` – nicht in `.storage`. Deine persönliche Produktliste und das HA-Backup bleiben dadurch klein. Erst wenn du einen Artikel tatsächlich scannst, landet genau dieser eine Artikel in deiner Produktdatenbank.
+- **Sicher aktualisieren:** Jede Datei wird gegen die SHA256-Prüfsumme aus dem Manifest geprüft, die neue Datenbank wird komplett aufgebaut und erst dann atomar ausgetauscht. Laufende Scans sehen nie einen halben Katalog. Abgewählte Kategorien verschwinden beim nächsten Laden.
+- **Monatlich frisch:** Eine GitHub Action baut den Katalog jeden Monat (am 1. um 03:00 UTC) neu aus den offiziellen Datenbank-Exporten und legt ihn im Release [`offline-catalog-de`](https://github.com/kallejoken/shys-barcode-scanner/releases/tag/offline-catalog-de) ab. Mit **Nach Updates prüfen** siehst du im Panel, ob es einen neueren Stand gibt.
+- **100 % offline:** Im Tab **Einstellungen** „Lokalen Offline-Katalog nutzen“ an- und *Open Food Facts* sowie *ean-suche.net* ausschalten. Unbekannte Codes landen dann wie gewohnt unter *Unbekannte Scans* bzw. in der Push-Antwort.
+
+Selbst bauen (z. B. für einen eigenen Spiegel): `python3 scripts/build_offline_catalog.py --out dist/catalog` – nur Python-Standardbibliothek, die Exporte werden gestreamt und nicht auf der Platte zwischengespeichert.
+
+**Lizenz & Quellenangabe:** Die Katalogdaten stammen aus Open Food Facts, Open Beauty Facts, Open Products Facts und Open Pet Food Facts und stehen unter der [Open Database License (ODbL) 1.0](https://opendatacommons.org/licenses/odbl/1-0/). Der daraus abgeleitete Katalog wird ebenfalls unter ODbL weitergegeben.
 
 ## Push-Nachricht mit Direkt-Antwort
 
@@ -187,7 +217,7 @@ Nach jedem Scan feuert zusätzlich das Event `shys_barcode_scanner_scan_processe
 
 ## Datenquellen
 
-- [Open Food Facts](https://world.openfoodfacts.org): Daten unter ODbL.
+- [Open Food Facts](https://world.openfoodfacts.org), [Open Beauty Facts](https://world.openbeautyfacts.org), [Open Products Facts](https://world.openproductsfacts.org), [Open Pet Food Facts](https://world.openpetfoodfacts.org): Daten unter [ODbL](https://opendatacommons.org/licenses/odbl/1-0/) – Online-Abfrage (Open Food Facts) und deutscher Offline-Katalog.
 - [Produktdaten von EAN-Suche.net](https://ean-suche.net): ca. 60 kostenlose Abfragen pro Stunde. Bei öffentlicher Nutzung ist ein Link als Quellenangabe Pflicht.
 - [OpengtinDB](https://opengtindb.org): nur mit eigener QueryID.
 
