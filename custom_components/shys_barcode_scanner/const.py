@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "shys_barcode_scanner"
 NAME: Final = "SHYS Barcode Scanner"
-VERSION: Final = "1.4.0"
+VERSION: Final = "1.4.1"
 
 # Lokale Datenbank (HA-Store unter <config>/.storage/shys_barcode_scanner)
 STORAGE_KEY: Final = DOMAIN

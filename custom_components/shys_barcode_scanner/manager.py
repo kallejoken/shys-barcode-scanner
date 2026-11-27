@@ -507,6 +507,7 @@ class BarcodeManager:
                     await self.storage.remove_pending(ean)
                     await self._async_clear_notification(ean)
                     self._pending_list_choices.pop(ean, None)
+                    self._apply_learned_last_result(existing, only_if_unknown=True)
                     self.async_notify_listeners()
                     return {"ean": ean, "already_known": True, "product": existing}
                 result = await self.async_learn(
@@ -700,7 +701,7 @@ class BarcodeManager:
         result = self._result(
             code,
             STATUS_ERROR if lookup_failed else STATUS_UNKNOWN,
-            name=code, target_list=target, action=action, item=item, device=device,
+            name="", target_list=target, action=action, item=item, device=device,
             source=None,
         )
         if action in (ACTION_ADDED, ACTION_INCREMENTED):
@@ -983,9 +984,41 @@ class BarcodeManager:
         result: dict[str, Any] = {"product": product}
         if add_to_list:
             result["scan"] = await self._add_product_to_list(product, None)
+        self._apply_learned_last_result(product, result.get("scan"))
         await self._async_clear_notification(clean_code(code))
         self.async_notify_listeners()
         return result
+
+    def _apply_learned_last_result(
+        self,
+        product: dict[str, Any],
+        scan: dict[str, Any] | None = None,
+        *,
+        only_if_unknown: bool = False,
+    ) -> None:
+        """last_result nach dem Anlernen setzen, ohne einen fremden neueren Scan zu überschreiben."""
+        if scan is not None:
+            self.last_result = scan
+            return
+        code = product["ean"]
+        current = self.last_result
+        if not current or clean_code(current.get("ean")) != code:
+            return
+        if only_if_unknown and current.get("status") != STATUS_UNKNOWN:
+            return
+        item_name = format_item_name(
+            product.get("name", ""), product.get("brand"), self._config[CONF_NAME_FORMAT]
+        )
+        self.last_result = self._result(
+            code,
+            STATUS_OK,
+            name=item_name,
+            brand=product.get("brand") or "",
+            product=product.get("name") or "",
+            source=product.get("source"),
+            target_list=product.get("target_list") or current.get("target_list"),
+            device=current.get("device"),
+        )
 
     async def async_delete(self, code: str) -> bool:
         removed = await self.storage.delete_product(code)
