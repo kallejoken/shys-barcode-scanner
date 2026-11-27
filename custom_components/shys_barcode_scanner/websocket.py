@@ -9,7 +9,8 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
-from .const import DOMAIN
+from .const import CATALOG_CATEGORIES, DOMAIN
+from .offline_catalog import CatalogError
 from .settings import build_settings_payload, config_entry, validate_settings
 
 
@@ -185,7 +186,169 @@ async def ws_import(hass: HomeAssistant, connection: websocket_api.ActiveConnect
     connection.send_result(msg["id"], stats)
 
 
+# ------------------------------------------------------------------ Offline-Katalog
+
+
+def _catalog(hass: HomeAssistant, connection: Any, msg: dict[str, Any]):
+    if (manager := _manager(hass, connection, msg)) is None:
+        return None, None
+    if manager.catalog is None:
+        connection.send_error(msg["id"], "not_supported", "Offline-Katalog ist nicht verfügbar")
+        return manager, None
+    return manager, manager.catalog
+
+
+async def _catalog_status(manager: Any) -> dict[str, Any]:
+    status = await manager.catalog.async_status()
+    status["enabled"] = manager.offline_catalog_enabled
+    return status
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/catalog_status"})
+@websocket_api.async_response
+async def ws_catalog_status(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    manager, catalog = _catalog(hass, connection, msg)
+    if catalog is None:
+        return
+    connection.send_result(msg["id"], await _catalog_status(manager))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/catalog_check_updates"})
+@websocket_api.async_response
+async def ws_catalog_check_updates(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    _manager_obj, catalog = _catalog(hass, connection, msg)
+    if catalog is None:
+        return
+    try:
+        result = await catalog.async_check_manifest()
+    except CatalogError as err:
+        connection.send_error(msg["id"], "catalog_unavailable", str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/catalog_download",
+        vol.Required("categories"): [vol.In(list(CATALOG_CATEGORIES))],
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_catalog_download(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    manager, catalog = _catalog(hass, connection, msg)
+    if catalog is None:
+        return
+    try:
+        await catalog.async_download_categories(msg["categories"])
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    except CatalogError as err:
+        connection.send_error(msg["id"], "catalog_failed", str(err))
+        return
+    except OSError as err:
+        connection.send_error(msg["id"], "catalog_failed", f"Katalog konnte nicht gespeichert werden: {err}")
+        return
+    manager.async_notify_listeners()
+    connection.send_result(msg["id"], await _catalog_status(manager))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/catalog_delete"})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_catalog_delete(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    manager, catalog = _catalog(hass, connection, msg)
+    if catalog is None:
+        return
+    try:
+        removed = await catalog.async_delete()
+    except CatalogError as err:
+        connection.send_error(msg["id"], "catalog_failed", str(err))
+        return
+    manager.async_notify_listeners()
+    connection.send_result(msg["id"], {"removed": removed, "status": await _catalog_status(manager)})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/catalog_search",
+        vol.Required("query"): str,
+        vol.Optional("category"): vol.Any(None, "", vol.In(list(CATALOG_CATEGORIES))),
+        vol.Optional("limit", default=30): vol.All(int, vol.Range(min=1, max=100)),
+    }
+)
+@websocket_api.async_response
+async def ws_catalog_search(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    manager, catalog = _catalog(hass, connection, msg)
+    if catalog is None:
+        return
+    results = await catalog.async_search(msg["query"], msg.get("category") or None, msg["limit"])
+    for item in results:
+        own = manager.storage.get_product(item["ean"])
+        item["in_own_db"] = own is not None
+        item["own_name"] = own.get("name") if own else None
+    connection.send_result(msg["id"], {"query": msg["query"], "results": results})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/catalog_add",
+        vol.Required("ean"): str,
+        vol.Optional("add_to_list", default=False): bool,
+        vol.Optional("target_list"): vol.Any(None, str),
+    }
+)
+@websocket_api.async_response
+async def ws_catalog_add(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    manager, catalog = _catalog(hass, connection, msg)
+    if catalog is None:
+        return
+    target = msg.get("target_list") or None
+    if target and not target.startswith("todo."):
+        connection.send_error(msg["id"], "invalid_format", "Ziel muss eine todo.*-Liste sein")
+        return
+    try:
+        result = await manager.async_catalog_add(
+            msg["ean"], add_to_list=msg["add_to_list"], target_list=target
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "not_found", str(err))
+        return
+    connection.send_result(msg["id"], result)
+
+
 @callback
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
-    for handler in (ws_get_state, ws_learn, ws_delete, ws_dismiss, ws_scan, ws_undo_scan, ws_get_settings, ws_save_settings, ws_test_push, ws_export, ws_import):
+    for handler in (
+        ws_get_state,
+        ws_learn,
+        ws_delete,
+        ws_dismiss,
+        ws_scan,
+        ws_undo_scan,
+        ws_get_settings,
+        ws_save_settings,
+        ws_test_push,
+        ws_export,
+        ws_import,
+        ws_catalog_status,
+        ws_catalog_check_updates,
+        ws_catalog_download,
+        ws_catalog_delete,
+        ws_catalog_search,
+        ws_catalog_add,
+    ):
         websocket_api.async_register_command(hass, handler)

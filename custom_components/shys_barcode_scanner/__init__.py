@@ -33,6 +33,10 @@ from .const import (
     ATTR_MERGE,
     ATTR_NAME,
     ATTR_TARGET_LIST,
+    CATALOG_DB_FILE,
+    CONF_CATALOG_BASE_URL,
+    CONF_USER_AGENT,
+    DEFAULT_USER_AGENT,
     DOMAIN,
     PANEL_COMPONENT,
     PANEL_ICON,
@@ -51,6 +55,7 @@ from .const import (
     VERSION,
 )
 from .manager import BarcodeManager
+from .offline_catalog import OfflineCatalog
 from .storage import BarcodeStorage
 from .websocket import async_register_websocket_commands
 
@@ -164,9 +169,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Integration aus dem Config-Entry starten."""
     storage = BarcodeStorage(Store(hass, STORAGE_VERSION, STORAGE_KEY))
     await storage.async_load()
-    manager = BarcodeManager(
-        hass, {**entry.data, **entry.options}, storage, async_get_clientsession(hass)
+    config = {**entry.data, **entry.options}
+    session = async_get_clientsession(hass)
+    # Eigene SQLite-Datei neben configuration.yaml – bewusst nicht im .storage-JSON
+    catalog = OfflineCatalog(
+        hass,
+        hass.config.path(CATALOG_DB_FILE),
+        session,
+        base_url=config.get(CONF_CATALOG_BASE_URL) or None,
+        user_agent=config.get(CONF_USER_AGENT) or DEFAULT_USER_AGENT,
     )
+    manager = BarcodeManager(hass, config, storage, session, catalog=catalog)
     manager.async_start()
     hass.data[DOMAIN] = manager
 
@@ -191,6 +204,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         manager: BarcodeManager | None = hass.data.pop(DOMAIN, None)
         if manager is not None:
             manager.async_stop()
+            if manager.catalog is not None:
+                await manager.catalog.async_close()
         frontend.async_remove_panel(hass, PANEL_URL_PATH)
     return unloaded
 

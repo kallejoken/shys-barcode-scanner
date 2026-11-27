@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "shys_barcode_scanner"
 NAME: Final = "SHYS Barcode Scanner"
-VERSION: Final = "1.3.0"
+VERSION: Final = "1.4.0"
 
 # Lokale Datenbank (HA-Store unter <config>/.storage/shys_barcode_scanner)
 STORAGE_KEY: Final = DOMAIN
@@ -56,6 +56,8 @@ CONF_NOTIFY_ONLY_HOME: Final = "notify_only_home"
 CONF_NOTIFY_ON_SUCCESS: Final = "notify_on_success"
 CONF_QUICK_LISTS: Final = "quick_lists"
 CONF_ESPHOME_DEVICE_PREFIX: Final = "esphome_device_prefix"
+CONF_USE_OFFLINE_CATALOG: Final = "use_offline_catalog"
+CONF_CATALOG_BASE_URL: Final = "catalog_base_url"
 
 # Interne Notify-Dienste, die nicht in der Mehrfachauswahl erscheinen
 INTERNAL_NOTIFY_SERVICES: Final = frozenset({"notify", "persistent_notification", "send_message"})
@@ -96,12 +98,15 @@ DEFAULT_OPTIONS: Final = {
     CONF_NOTIFY_ON_SUCCESS: False,
     CONF_QUICK_LISTS: [],
     CONF_ESPHOME_DEVICE_PREFIX: "",
+    CONF_USE_OFFLINE_CATALOG: True,
+    CONF_CATALOG_BASE_URL: "",
 }
 
 # Datenquellen
 SOURCE_OPENFOODFACTS: Final = "openfoodfacts"
 SOURCE_EANSUCHE: Final = "ean-suche"
 SOURCE_OPENGTINDB: Final = "opengtindb"
+SOURCE_OFFLINE_CATALOG: Final = "offline_catalog"
 SOURCE_MANUAL: Final = "manual"
 SOURCE_IMPORT: Final = "import"
 SOURCE_NOTIFICATION: Final = "notification"
@@ -134,6 +139,46 @@ ATTR_TARGET_LIST: Final = "target_list"
 ATTR_ADD_TO_LIST: Final = "add_to_list"
 ATTR_DATA: Final = "data"
 ATTR_MERGE: Final = "merge"
+
+# Deutscher Offline-Katalog (eigene SQLite-Datei im HA-Config-Ordner, nicht im JSON-Store)
+CATALOG_DB_FILE: Final = "shys_barcode_scanner_catalog.db"
+CATALOG_MANIFEST_FILE: Final = "catalog-de-manifest.json"
+CATALOG_SCHEMA_VERSION: Final = 1
+CATALOG_MAX_FILE_BYTES: Final = 200 * 1024 * 1024
+DEFAULT_CATALOG_BASE_URL: Final = (
+    "https://github.com/kallejoken/shys-barcode-scanner/releases/download/offline-catalog-de"
+)
+CATALOG_LICENSE: Final = "ODbL (Open Database License)"
+CATALOG_ATTRIBUTION: Final = (
+    "Datenquelle: Open Food Facts, Open Beauty Facts, Open Products Facts, "
+    "Open Pet Food Facts (ODbL)"
+)
+CATALOG_CATEGORIES: Final = {
+    "food": {
+        "label_de": "Lebensmittel & Getränke",
+        "label_en": "Food & Beverages",
+        "source": "Open Food Facts",
+    },
+    "beauty": {
+        "label_de": "Drogerie & Kosmetik",
+        "label_en": "Beauty & Personal Care",
+        "source": "Open Beauty Facts",
+    },
+    "products": {
+        "label_de": "Haushalt & Alltag",
+        "label_en": "Household & Everyday",
+        "source": "Open Products Facts",
+    },
+    "petfood": {
+        "label_de": "Tierfutter",
+        "label_en": "Pet Food",
+        "source": "Open Pet Food Facts",
+    },
+}
+
+# Bei EANs, die in mehreren Datenbanken stehen, gewinnt die spezialisierte Quelle
+# (z. B. Zahnpasta aus Open Beauty Facts statt einer falsch einsortierten OFF-Kopie).
+CATALOG_IMPORT_PRIORITY: Final = ("beauty", "petfood", "products", "food")
 
 # Maximale Länge eines Codes (QR-Codes dürfen länger sein als EANs)
 MAX_CODE_LENGTH: Final = 128

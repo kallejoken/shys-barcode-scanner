@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_CATALOG_BASE_URL,
     CONF_DUPLICATE_MODE,
     CONF_ESPHOME_DEVICE_PREFIX,
     CONF_NAME,
@@ -28,6 +29,7 @@ from .const import (
     CONF_TODO_ENTITY,
     CONF_UNKNOWN_MODE,
     CONF_USE_EANSUCHE,
+    CONF_USE_OFFLINE_CATALOG,
     CONF_USE_OPENFOODFACTS,
     CONF_USER_AGENT,
     DEFAULT_NAME,
@@ -53,6 +55,7 @@ TEXT_OPTION_KEYS = (
     CONF_OPENGTINDB_QUERY_ID,
     CONF_USER_AGENT,
     CONF_ESPHOME_DEVICE_PREFIX,
+    CONF_CATALOG_BASE_URL,
 )
 
 
@@ -132,6 +135,9 @@ def build_options_schema(
             NAME_FORMATS, CONF_NAME_FORMAT
         ),
         vol.Required(
+            CONF_USE_OFFLINE_CATALOG, default=bool(values.get(CONF_USE_OFFLINE_CATALOG, True))
+        ): selector.BooleanSelector(),
+        vol.Required(
             CONF_USE_OPENFOODFACTS, default=bool(values[CONF_USE_OPENFOODFACTS])
         ): selector.BooleanSelector(),
         vol.Required(CONF_USE_EANSUCHE, default=bool(values[CONF_USE_EANSUCHE])): selector.BooleanSelector(),
@@ -165,6 +171,7 @@ def normalize_options(user_input: dict[str, Any]) -> dict[str, Any]:
     data[CONF_NOTIFY_ONLY_HOME] = bool(data.get(CONF_NOTIFY_ONLY_HOME, False))
     data[CONF_NOTIFY_ON_SUCCESS] = bool(data.get(CONF_NOTIFY_ON_SUCCESS, False))
     data[CONF_QUICK_LISTS] = normalize_todo_entities(data.get(CONF_QUICK_LISTS))
+    data[CONF_USE_OFFLINE_CATALOG] = bool(data.get(CONF_USE_OFFLINE_CATALOG, True))
     return data
 
 

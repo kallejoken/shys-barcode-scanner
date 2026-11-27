@@ -13,6 +13,7 @@ from .config_flow import (
     validate_notify_services,
 )
 from .const import (
+    CONF_CATALOG_BASE_URL,
     CONF_DUPLICATE_MODE,
     CONF_ESPHOME_DEVICE_PREFIX,
     CONF_NAME_FORMAT,
@@ -25,8 +26,10 @@ from .const import (
     CONF_TODO_ENTITY,
     CONF_UNKNOWN_MODE,
     CONF_USE_EANSUCHE,
+    CONF_USE_OFFLINE_CATALOG,
     CONF_USE_OPENFOODFACTS,
     CONF_USER_AGENT,
+    DEFAULT_CATALOG_BASE_URL,
     DEFAULT_OPTIONS,
     DEFAULT_TODO_ENTITY,
     DOMAIN,
@@ -48,6 +51,7 @@ SETTING_KEYS = (
     CONF_DUPLICATE_MODE,
     CONF_UNKNOWN_MODE,
     CONF_NAME_FORMAT,
+    CONF_USE_OFFLINE_CATALOG,
     CONF_USE_OPENFOODFACTS,
     CONF_USE_EANSUCHE,
     CONF_OPENGTINDB_QUERY_ID,
@@ -56,9 +60,11 @@ SETTING_KEYS = (
     CONF_NOTIFY_ONLY_HOME,
     CONF_NOTIFY_ON_SUCCESS,
     CONF_ESPHOME_DEVICE_PREFIX,
+    CONF_CATALOG_BASE_URL,
 )
 
 _BOOL_KEYS = (
+    CONF_USE_OFFLINE_CATALOG,
     CONF_USE_OPENFOODFACTS,
     CONF_USE_EANSUCHE,
     CONF_NOTIFY_ONLY_HOME,
@@ -83,6 +89,7 @@ def effective_settings(config: dict[str, Any] | None) -> dict[str, Any]:
         CONF_DUPLICATE_MODE: values.get(CONF_DUPLICATE_MODE) or DEFAULT_OPTIONS[CONF_DUPLICATE_MODE],
         CONF_UNKNOWN_MODE: values.get(CONF_UNKNOWN_MODE) or DEFAULT_OPTIONS[CONF_UNKNOWN_MODE],
         CONF_NAME_FORMAT: values.get(CONF_NAME_FORMAT) or DEFAULT_OPTIONS[CONF_NAME_FORMAT],
+        CONF_USE_OFFLINE_CATALOG: _as_bool(values.get(CONF_USE_OFFLINE_CATALOG), True),
         CONF_USE_OPENFOODFACTS: _as_bool(values.get(CONF_USE_OPENFOODFACTS), True),
         CONF_USE_EANSUCHE: _as_bool(values.get(CONF_USE_EANSUCHE), True),
         CONF_OPENGTINDB_QUERY_ID: (values.get(CONF_OPENGTINDB_QUERY_ID) or "").strip(),
@@ -91,6 +98,7 @@ def effective_settings(config: dict[str, Any] | None) -> dict[str, Any]:
         CONF_NOTIFY_ONLY_HOME: _as_bool(values.get(CONF_NOTIFY_ONLY_HOME), False),
         CONF_NOTIFY_ON_SUCCESS: _as_bool(values.get(CONF_NOTIFY_ON_SUCCESS), False),
         CONF_ESPHOME_DEVICE_PREFIX: (values.get(CONF_ESPHOME_DEVICE_PREFIX) or "").strip(),
+        CONF_CATALOG_BASE_URL: (values.get(CONF_CATALOG_BASE_URL) or "").strip(),
     }
 
 
@@ -130,6 +138,7 @@ def build_settings_payload(hass: HomeAssistant | None, config: dict[str, Any] | 
         "settings": settings,
         "available_todo_lists": available_todo_lists(hass, extras),
         "available_notify_services": available_notify_services(hass, settings[CONF_NOTIFY_SERVICES]),
+        "default_catalog_base_url": DEFAULT_CATALOG_BASE_URL,
     }
 
 
@@ -156,6 +165,9 @@ def validate_settings(user_input: dict[str, Any], current: dict[str, Any] | None
         raise ValueError(f"Ungültiges Verhalten für unbekannte Codes: {data[CONF_UNKNOWN_MODE]}")
     if data[CONF_NAME_FORMAT] not in NAME_FORMATS:
         raise ValueError(f"Ungültiges Textformat: {data[CONF_NAME_FORMAT]}")
+    base_url = data.get(CONF_CATALOG_BASE_URL, "")
+    if base_url and not base_url.startswith(("https://", "http://")):
+        raise ValueError("Die Katalog-Adresse muss mit https:// beginnen.")
     if not validate_notify_services(data.get(CONF_NOTIFY_SERVICES, [])):
         raise ValueError("Jeder Benachrichtigungsdienst muss mit notify. beginnen.")
     # Nur bekannte Options-Schlüssel speichern (kein Legacy-notify_service, kein Titel).

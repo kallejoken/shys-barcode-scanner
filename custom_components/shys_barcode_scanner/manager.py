@@ -1,4 +1,4 @@
-"""Scan-Ablauf: lokale DB -> API-Kaskade -> To-do-Liste -> Rückmeldung an ESPHome."""
+"""Scan-Ablauf: lokale DB -> Offline-Katalog -> API-Kaskade -> To-do-Liste -> Rückmeldung an ESPHome."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from .const import (
     ACTION_INCREMENTED,
     ACTION_NONE,
     ACTION_SKIPPED,
+    CONF_CATALOG_BASE_URL,
     CONF_DUPLICATE_MODE,
     CONF_ESPHOME_DEVICE_PREFIX,
     CONF_NAME_FORMAT,
@@ -29,6 +30,7 @@ from .const import (
     CONF_TODO_ENTITY,
     CONF_UNKNOWN_MODE,
     CONF_USE_EANSUCHE,
+    CONF_USE_OFFLINE_CATALOG,
     CONF_USE_OPENFOODFACTS,
     CONF_USER_AGENT,
     DEFAULT_OPTIONS,
@@ -49,6 +51,7 @@ from .const import (
     PANEL_URL_PATH,
     SIGNAL_UPDATE,
     SOURCE_NOTIFICATION,
+    SOURCE_OFFLINE_CATALOG,
     STATUS_DUPLICATE,
     STATUS_ERROR,
     STATUS_OK,
@@ -398,10 +401,12 @@ class BarcodeManager:
         config: dict[str, Any],
         storage: BarcodeStorage,
         session: Any,
+        catalog: Any = None,
     ) -> None:
         self.hass = hass
         self.storage = storage
         self._session = session
+        self.catalog = catalog
         self._config: dict[str, Any] = {}
         self.lookup: EanLookup
         self.update_config(config)
@@ -422,6 +427,8 @@ class BarcodeManager:
             use_eansuche=bool(self._config[CONF_USE_EANSUCHE]),
             opengtindb_query_id=self._config.get(CONF_OPENGTINDB_QUERY_ID) or "",
         )
+        if self.catalog is not None and hasattr(self.catalog, "set_base_url"):
+            self.catalog.set_base_url(self._config.get(CONF_CATALOG_BASE_URL) or None)
 
     @property
     def config(self) -> dict[str, Any]:
@@ -570,7 +577,17 @@ class BarcodeManager:
             await self.storage.touch_product(code)
             return await self._add_product_to_list(product, device)
 
-        # 2) API-Kaskade nur für echte EAN/GTIN
+        # 2) Lokaler Offline-Katalog (SQLite, < 1 ms, ohne Internet). Nur der gescannte
+        #    Artikel wird in die persönliche DB übernommen, damit man ihn dort anpassen kann.
+        offline = await self._async_offline_lookup(code)
+        if offline is not None:
+            product = await self.storage.upsert_product(
+                code, offline["name"], brand=offline.get("brand") or None, source=SOURCE_OFFLINE_CATALOG
+            )
+            await self.storage.touch_product(code)
+            return await self._add_product_to_list(product, device)
+
+        # 3) Online-API-Kaskade nur für echte EAN/GTIN
         lookup_failed = False
         if is_valid_gtin(code) and self.lookup.any_enabled:
             found = await self.lookup.async_lookup(code)
@@ -582,8 +599,56 @@ class BarcodeManager:
                 return await self._add_product_to_list(product, device)
             lookup_failed = found.all_failed
 
-        # 3) Unbekannt -> Anlern-Liste
+        # 4) Unbekannt -> Anlern-Liste
         return await self._handle_unknown(code, device, lookup_failed)
+
+    @property
+    def offline_catalog_enabled(self) -> bool:
+        return self.catalog is not None and bool(self._config.get(CONF_USE_OFFLINE_CATALOG, True))
+
+    async def _async_offline_lookup(self, code: str) -> dict[str, Any] | None:
+        if not self.offline_catalog_enabled or not code.isdigit() or not is_valid_gtin(code):
+            return None
+        try:
+            hit = await self.catalog.async_lookup(code)
+        except Exception:  # ein Katalogfehler darf den Scan nie verhindern
+            _LOGGER.exception("Offline-Katalog: Lookup für %s fehlgeschlagen", code)
+            return None
+        if not hit or not hit.get("name"):
+            return None
+        return hit
+
+    async def async_catalog_add(
+        self, code: str, *, add_to_list: bool = False, target_list: str | None = None
+    ) -> dict[str, Any]:
+        """Artikel aus dem Offline-Katalog in die eigene DB übernehmen (optional gleich auf die Liste)."""
+        if self.catalog is None:
+            raise ValueError("Offline-Katalog ist nicht verfügbar")
+        code = clean_code(code)
+        hit = await self.catalog.async_lookup(code)
+        if not hit:
+            raise ValueError(f"{code} ist nicht im Offline-Katalog")
+        existing = self.storage.get_product(code)
+        if existing is not None and existing.get("source") != SOURCE_OFFLINE_CATALOG:
+            # Eigene/gelernte Namen haben immer Vorrang und werden nicht überschrieben.
+            product = existing
+            if target_list:
+                product = await self.storage.upsert_product(
+                    code, existing["name"], brand=existing.get("brand"), source=existing.get("source"),
+                    target_list=target_list,
+                )
+        else:
+            product = await self.storage.upsert_product(
+                code, hit["name"], brand=hit.get("brand") or "", source=SOURCE_OFFLINE_CATALOG,
+                target_list=target_list or (existing or {}).get("target_list"),
+            )
+        result: dict[str, Any] = {"product": product}
+        if add_to_list:
+            async with self._lock:
+                result["scan"] = await self._add_product_to_list(product, None)
+        await self._async_clear_notification(code)
+        self.async_notify_listeners()
+        return result
 
     async def _add_product_to_list(self, product: dict[str, Any], device: str | None) -> dict[str, Any]:
         item_name = format_item_name(
@@ -1103,5 +1168,6 @@ class BarcodeManager:
             "last_result": self.last_result,
             "last_undoable_scan": self.last_undoable_scan(),
             "todo_entity": self.todo_entity,
+            "offline_catalog_enabled": self.offline_catalog_enabled,
             "config": {k: v for k, v in self._config.items() if k != CONF_OPENGTINDB_QUERY_ID},
         }
