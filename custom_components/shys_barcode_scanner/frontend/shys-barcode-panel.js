@@ -624,7 +624,7 @@ class ShysBarcodePanel extends HTMLElement {
         <a href="https://world.openbeautyfacts.org" target="_blank" rel="noopener">Open Beauty Facts</a>,
         <a href="https://world.openproductsfacts.org" target="_blank" rel="noopener">Open Products Facts</a>,
         <a href="https://world.openpetfoodfacts.org" target="_blank" rel="noopener">Open Pet Food Facts</a> –
-        lizenziert unter der <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">Open Database License (ODbL)</a>.
+        lizenziert unter der <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">Open Database License (ODbL) 1.0</a>.
         Gefiltert auf in Deutschland erhältliche Produkte mit gültiger EAN.</div></div>`;
 
     html += `<div class="card"><h2>Offline-Suche</h2>`;
