@@ -41,10 +41,16 @@ USER_AGENT = (
     "SHYS-Barcode-Scanner-CatalogBuilder/1.4 "
     "(+https://github.com/kallejoken/shys-barcode-scanner)"
 )
-LICENSE = "ODbL (Open Database License)"
+LICENSE = "Open Database License (ODbL) 1.0"
+CONTENTS_LICENSE = "Database Contents License (DbCL) 1.0"
+CONTENTS_LICENSE_URL = "https://opendatacommons.org/licenses/dbcl/1-0/"
 ATTRIBUTION = (
-    "Datenquelle: Open Food Facts, Open Beauty Facts, Open Products Facts, "
-    "Open Pet Food Facts (ODbL)"
+    "Enthält Daten aus Open Food Facts (https://world.openfoodfacts.org), "
+    "Open Beauty Facts (https://world.openbeautyfacts.org), "
+    "Open Products Facts (https://world.openproductsfacts.org) und "
+    "Open Pet Food Facts (https://world.openpetfoodfacts.org), "
+    "lizenziert unter ODbL 1.0 (Einzelinhalte: DbCL 1.0). "
+    "Abgeleiteter Katalog unter ODbL 1.0."
 )
 
 CATEGORIES: dict[str, dict[str, str]] = {
@@ -352,6 +358,8 @@ def build(out_dir: Path, categories: list[str], sources: dict[str, str], user_ag
         "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "license": LICENSE,
         "license_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+        "contents_license": CONTENTS_LICENSE,
+        "contents_license_url": CONTENTS_LICENSE_URL,
         "attribution": ATTRIBUTION,
         "filter": "countries_tags enthält en:germany; gültige EAN-8/EAN-13; Produktname vorhanden",
         "categories": {},
