@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://www.home-assistant.io/integrations/marketplace/"><img src="https://img.shields.io/badge/HA%20Marketplace-Custom-F9B013.svg?style=for-the-badge&labelColor=002039" alt="Home Assistant Marketplace"></a>
-  <a href="https://github.com/kallejoken/shys-barcode-scanner/releases"><img src="https://img.shields.io/badge/Version-1.2.0-00AEE7.svg?style=for-the-badge&labelColor=002039" alt="Version 1.2.0"></a>
+  <a href="https://github.com/kallejoken/shys-barcode-scanner/releases"><img src="https://img.shields.io/badge/Version-1.3.0-00AEE7.svg?style=for-the-badge&labelColor=002039" alt="Version 1.3.0"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2024.12%2B-2E6EB4.svg?style=for-the-badge&labelColor=002039" alt="Home Assistant 2024.12+">
 </p>
 
@@ -54,7 +54,9 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 - 🔎 **Automatische Produktsuche:** Open Food Facts → ean-suche.net → optional OpengtinDB. Einzeln abschaltbar.
 - ✍️ **Anlern-Modus:** Unbekannte Codes landen in der Seitenleiste unter *Unbekannte Scans*. Name eintippen, fertig.
 - 📲 **Direkt-Antwort per Push:** Unbekannter Code? Die Home-Assistant-App meldet sich, du tippst den Produktnamen direkt in die Benachrichtigung – gespeichert und auf der Liste, ohne die App zu öffnen. Funktioniert auf iOS und Android.
-- 👨‍👩‍👧 **Mehrere Handys (neu in 1.2.0):** Beliebig viele `notify.mobile_app_*`-Dienste auswählen. Sobald jemand antwortet oder verwirft, verschwindet die Nachricht auf allen Handys. Optional nur an Personen senden, die Home Assistant als *Zuhause* erkennt.
+- 👨‍👩‍👧 **Mehrere Handys (seit 1.2.0):** Beliebig viele `notify.mobile_app_*`-Dienste auswählen. Sobald jemand antwortet oder verwirft, verschwindet die Nachricht auf allen Handys. Optional nur an Personen senden, die Home Assistant als *Zuhause* erkennt.
+- ↩️ **Rückgängig (neu in 1.3.0):** Einen versehentlichen Scan im Panel beim *Letzten Scan* mit **Rückgängig** wieder von der Liste nehmen. Optional gibt es dazu eine kurze Erfolgs-Push mit demselben Button – standardmäßig aus, damit bekannte Scans nicht stören.
+- 🛒 **Listenwahl in der Push-Antwort (neu in 1.3.0):** Zusätzliche Schnell-Listen festlegen, dann erscheinen in der Unbekannt-Nachricht zwei Antwort-Buttons (Standard-Liste und erste Zusatz-Liste) plus *Verwerfen*. Alternativ hängst du in der Antwort `@Listenname` an, z. B. `Spülmittel @Drogerie`.
 - 🗂️ **Eigenes Panel „Barcode Scanner“** in der Seitenleiste: Produkte suchen, umbenennen, löschen, eigene Codes für lose Ware oder QR-Sticker anlegen, Test-Scan, JSON-Export und -Import.
 - 📝 **Jede `todo`-Liste als Ziel**, auch pro Produkt (z. B. Drogerie auf eine eigene Liste).
 - ➕ **Duplikat-Schutz:** Trotzdem nochmal eintragen, überspringen oder Menge hochzählen (`2x Milch`).
@@ -76,17 +78,19 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 
 | Bereich | Wofür |
 |---|---|
-| Unbekannte Scans | Namen für unbekannte Codes vergeben („Speichern & auf Liste“) oder verwerfen |
+| Unbekannte Scans | Letzten Scan inkl. **Rückgängig**, Namen für unbekannte Codes vergeben („Speichern & auf Liste“) oder verwerfen |
 | Produktdatenbank | Suchen, umbenennen, löschen, eigene Codes für lose Ware/QR-Sticker anlegen, Ziel-Liste pro Produkt |
 | Test & Backup | Test-Scan ohne Scanner, JSON-Export und -Import |
+| Einstellungen | Alle Integrations-Optionen inkl. Push-Handys und **Test-Push** – derselbe Datenstand wie unter *Konfigurieren* |
 
 ## Optionen (alles optional)
 
-*Geräte & Dienste → SHYS Barcode Scanner → Konfigurieren*
+Die Einstellungen erreichst du direkt im Panel unter **Einstellungen** (inkl. einem **Test-Push**, um die Handy-Benachrichtigungen zu prüfen). Alternativ: *Geräte & Dienste → SHYS Barcode Scanner → Konfigurieren*. Beide Wege schreiben dieselben Integrations-Optionen und bleiben synchron.
 
 | Option | Standard | Bedeutung |
 |---|---|---|
 | Standard-Liste | `todo.shopping_list` | Jede `todo.*`-Liste |
+| Zusätzliche Schnell-Listen | leer | Optionale weitere `todo`-Listen für die Push-Antwort bei unbekannten Codes |
 | Schon auf der Liste | Menge hochzählen | `Trotzdem nochmal` / `Nicht nochmal` / `2x, 3x …` |
 | Unbekannte Codes | Nur zum Anlernen merken | Optional zusätzlich den Code auf die Liste setzen |
 | Text auf der Liste | Marke + Produkt | oder nur Produkt (Marke wird nie doppelt geschrieben) |
@@ -94,6 +98,7 @@ Ordner `custom_components/shys_barcode_scanner` nach `<config>/custom_components
 | OpengtinDB-QueryID | leer | Eigene ID von <https://opengtindb.org/userid.php> |
 | Handys für Benachrichtigungen | leer | Mehrfachauswahl, z. B. `notify.mobile_app_mein_handy` und `notify.mobile_app_pixel_frau` (mit Direkt-Antwort, siehe unten) |
 | Nur an anwesende Personen senden | aus | Push nur an Handys, deren Person bzw. Gerät als *Zuhause* erkannt wird |
+| Kurze Erfolgs-Nachricht mit Rückgängig-Button | aus | Nach einem bekannten Scan eine kurze Push mit **Rückgängig** senden (respektiert den Anwesenheitsfilter) |
 | User-Agent | SHYSBarcodeScanner/1.0 … | Open Food Facts wünscht `AppName/Version (deine-mail@example.com)` |
 | ESPHome-Gerät für Rückmeldung | leer | Nur nötig, wenn das Event keinen Gerätenamen mitschickt |
 
@@ -108,12 +113,17 @@ Bei jedem neuen unbekannten Code kommt dann **„Unbekannter Barcode“** auf di
 | In der Nachricht | Was passiert |
 |---|---|
 | **Produkt benennen** | Textfeld direkt in der Benachrichtigung (iOS: lange drücken bzw. nach unten ziehen, Android: aufklappen). Produktname eintippen, absenden: Das Produkt wird in der lokalen Datenbank gespeichert und auf die Standard-Liste gesetzt (Duplikat-Einstellung gilt). Die Nachricht verschwindet danach. |
+| **→ Listenname** (optional) | Wenn unter *Zusätzliche Schnell-Listen* mindestens eine weitere Liste gewählt ist, ersetzt das die einzelne „Produkt benennen“-Aktion: Button 1 ist die Standard-Liste, Button 2 die erste Zusatz-Liste, plus **Verwerfen** (maximal 3 Buttons, damit Android nichts abschneidet). Das Produkt wird mit dieser Ziel-Liste gespeichert und direkt dort eingetragen. |
 | **Verwerfen** | Code aus *Unbekannte Scans* entfernen |
 | Auf die Nachricht tippen | Öffnet direkt das Panel **Barcode Scanner** |
 
+Zusätzlich kannst du in jeder Antwort `@Listenname` anhängen, z. B. `Spülmittel @Drogerie`. Das funktioniert auch dann, wenn mehr als zwei Listen im Spiel sind.
+
 Sobald jemand in der Push-Nachricht antwortet oder verwirft – oder du denselben Code im Panel auflöst bzw. verwirfst – wird die Nachricht automatisch auf **allen** konfigurierten Handys ausgeblendet.
 
-Technisch: Die Nachricht trägt den Tag `shys_barcode_<ean>` und eigene Aktionen `SHYS_REPLY_<ean>` / `SHYS_DISMISS_<ean>`. Die Integration reagiert nur auf diese, `REPLY`-Aktionen deiner anderen Automationen bleiben unberührt. Ein bereits bekannter Code, der von zwei Handys fast gleichzeitig beantwortet wird, wird nur einmal gelernt.
+Optional (Haken *Kurze Erfolgs-Nachricht mit Rückgängig-Button*): Nach einem bekannten Scan kommt eine kurze Push **„Auf der Einkaufsliste“** mit einem Button **Rückgängig**. Derselbe Button steht im Panel beim *Letzten Scan*.
+
+Technisch: Die Unbekannt-Nachricht trägt den Tag `shys_barcode_<ean>` und die Aktionen `SHYS_REPLY_<ean>` bzw. `SHYS_REPLY_L0_<ean>` / `SHYS_REPLY_L1_<ean>` und `SHYS_DISMISS_<ean>`. Die optionale Erfolgs-Push nutzt `shys_barcode_ok_<undo_id>` und `SHYS_UNDO_<undo_id>`. Die Integration reagiert nur auf diese, `REPLY`-Aktionen deiner anderen Automationen bleiben unberührt. Ein bereits bekannter Code, der von zwei Handys fast gleichzeitig beantwortet wird, wird nur einmal gelernt.
 
 ## Unterstützte Einkaufslisten (Bring!, Picnic & Co.)
 
