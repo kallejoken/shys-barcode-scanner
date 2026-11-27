@@ -1,0 +1,157 @@
+<!doctype html>
+<html><head><meta charset="utf-8"></head>
+<body>
+<pre id="result">PENDING</pre>
+<script type="module">
+const calls = [];
+const state = {
+  products: [{ ean: "4337256722261", name: "Butter", brand: "ja!", source: "openfoodfacts", target_list: null, scan_count: 3 }],
+  pending: [{ ean: "QR-<b>X</b>", first_seen: "2026-11-26T20:00:00+00:00", last_seen: "2026-11-26T20:00:00+00:00", scan_count: 2, device: "barcode-scanner" }],
+  last_result: { ean: "QR-<b>X</b>", status: "unknown", name: "QR-<b>X</b>", timestamp: "2026-11-26T20:00:00+00:00" },
+  todo_entity: "todo.shopping_list",
+};
+const catalogInstalled = {
+  installed: true, enabled: true, total_count: 381564, size_bytes: 22085632, generated_at: "2026-11-27T13:13:09Z",
+  downloaded_at: "2026-11-27T14:00:00Z", installed_categories: ["food", "beauty", "products"],
+  counts: { food: 371864, beauty: 6523, products: 4009 },
+};
+const hass = {
+  user: { is_admin: true },
+  states: {
+    "todo.shopping_list": { attributes: { friendly_name: "Einkaufsliste" } },
+    "todo.picnic": { attributes: { friendly_name: "Picnic Warenkorb" } },
+    "sensor.shys_barcode_scanner_last_scan": { last_updated: "1" },
+  },
+  async callWS(msg) {
+    calls.push(msg);
+    if (msg.type.endsWith("/get_state")) return JSON.parse(JSON.stringify(state));
+    if (msg.type.endsWith("/learn")) { state.pending = []; return { product: {} }; }
+    if (msg.type.endsWith("/scan")) return { status: "ok", name: "ja! Butter" };
+    if (msg.type.endsWith("/catalog_status")) return { installed: false, enabled: true, installed_categories: [], counts: {} };
+    if (msg.type.endsWith("/catalog_download")) return catalogInstalled;
+    if (msg.type.endsWith("/catalog_search")) return { results: [{ ean: "4001686009727", brand: "Haribo", name: "Stars <i>", category: "food", in_own_db: false }] };
+    if (msg.type.endsWith("/catalog_add")) return { product: { name: "Stars" }, scan: { status: "ok", name: "Haribo Stars" } };
+    if (msg.type.endsWith("/get_settings")) return { settings: { todo_entity: "todo.shopping_list", use_offline_catalog: true, use_openfoodfacts: false, use_eansuche: false, opengtindb_query_id: "" }, available_todo_lists: [], available_notify_services: [], default_catalog_base_url: "https://example.invalid/cat" };
+    if (msg.type.endsWith("/save_settings")) return { settings: msg.settings, available_todo_lists: [], available_notify_services: [] };
+    return {};
+  },
+};
+const out = {};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+try {
+  await import("../../custom_components/shys_barcode_scanner/frontend/shys-barcode-panel.js");
+  const el = document.createElement("shys-barcode-panel");
+  document.body.appendChild(el);
+  el.narrow = true;
+  el.hass = hass;
+  await sleep(50);
+  const root = el.shadowRoot;
+  out.tabs = [...root.querySelectorAll(".tab")].map((t) => t.textContent.trim());
+  const lastRow = root.querySelector(".card .row");
+  out.noDuplicateEan = lastRow
+    && lastRow.querySelector(".code")?.textContent === "QR-<b>X</b>"
+    && (lastRow.querySelector(".grow")?.textContent || "").trim() === "";
+  out.lastScanBadge = lastRow?.querySelector(".src")?.textContent === "Unbekannt – bitte anlernen";
+  out.escaped = root.innerHTML.includes("QR-&lt;b&gt;X&lt;/b&gt;") && !root.querySelector("#content b");
+  out.todoOptions = [...root.querySelectorAll("select option")].map((o) => o.textContent);
+  root.querySelector('[data-key="pname-QR-<b>X</b>"]').value = "Brötchen";
+  root.querySelector('[data-key="plist-QR-<b>X</b>"]').value = "todo.picnic";
+  root.querySelector('[data-action="learn-pending"]').click();
+  await sleep(50);
+  out.learnCall = calls.find((c) => c.type === "shys_barcode_scanner/learn");
+  out.afterLearnEmpty = root.textContent.includes("Keine unbekannten Scans");
+  // Produkte-Tab + Suche
+  root.querySelector('[data-tab="products"]').click();
+  await sleep(10);
+  out.productsShown = root.textContent.includes("ja! · Butter") && root.textContent.includes("Open Food Facts");
+  const search = root.querySelector('[data-key="search"]');
+  search.focus();
+  search.value = "zzz";
+  search.dispatchEvent(new Event("input", { bubbles: true }));
+  await sleep(10);
+  out.searchEmpty = root.textContent.includes("Nichts gefunden.");
+  out.searchKeepsFocus = root.activeElement && root.activeElement.dataset.key === "search";
+  // Tools-Tab: Test-Scan
+  root.querySelector('[data-tab="tools"]').click();
+  await sleep(10);
+  root.querySelector('[data-key="test-ean"]').value = "4337256722261";
+  root.querySelector('[data-action="test-scan"]').click();
+  await sleep(50);
+  out.scanCall = calls.find((c) => c.type === "shys_barcode_scanner/scan");
+  out.flash = root.querySelector(".msg") ? root.querySelector(".msg").textContent : null;
+  // hass-Update ohne Sensoränderung lädt nicht neu, mit Änderung schon
+  const before = calls.filter((c) => c.type.endsWith("/get_state")).length;
+  el.hass = { ...hass };
+  await sleep(10);
+  const mid = calls.filter((c) => c.type.endsWith("/get_state")).length;
+  el.hass = { ...hass, states: { ...hass.states, "sensor.shys_barcode_scanner_last_scan": { last_updated: "2" } } };
+  await sleep(50);
+  const after = calls.filter((c) => c.type.endsWith("/get_state")).length;
+  out.reloadLogic = mid === before && after === before + 1;
+  // laufendes _load() darf ein zweites Sensor-Update nicht verlieren
+  let release;
+  const blocked = new Promise((r) => { release = r; });
+  let gated = 0;
+  const innerCallWS = hass.callWS;
+  const delayedHass = {
+    ...hass,
+    states: { ...hass.states, "sensor.shys_barcode_scanner_last_scan": { last_updated: "3" } },
+    async callWS(msg) {
+      if (msg.type.endsWith("/get_state")) {
+        gated += 1;
+        if (gated === 1) await blocked;
+      }
+      return innerCallWS(msg);
+    },
+  };
+  const beforeQueue = calls.filter((c) => c.type.endsWith("/get_state")).length;
+  el.hass = delayedHass;
+  await sleep(20);
+  el.hass = {
+    ...delayedHass,
+    states: { ...delayedHass.states, "sensor.shys_barcode_scanner_last_scan": { last_updated: "4" } },
+  };
+  await sleep(20);
+  release();
+  await sleep(50);
+  out.reloadQueued = calls.filter((c) => c.type.endsWith("/get_state")).length === beforeQueue + 2;
+  // Offline-Katalog-Tab
+  root.querySelector('[data-tab="catalog"]').click();
+  await sleep(50);
+  out.catalogNotInstalled = root.textContent.includes("Nicht installiert") && root.textContent.includes("ODbL");
+  out.catalogBoxes = [...root.querySelectorAll("[data-catsel]")].map((b) => [b.dataset.catsel, b.checked]);
+  const pet = root.querySelector('[data-catsel="petfood"]');
+  pet.checked = false;
+  pet.dispatchEvent(new Event("change", { bubbles: true }));
+  root.querySelector('[data-action="catalog-download"]').click();
+  await sleep(50);
+  out.downloadCall = calls.find((c) => c.type.endsWith("/catalog_download"));
+  out.catalogInstalledShown = root.textContent.includes("Installiert") && root.textContent.includes("381.564");
+  const q = root.querySelector('[data-key="catalog-query"]');
+  q.focus();
+  q.value = "haribo";
+  q.dispatchEvent(new Event("input", { bubbles: true }));
+  await sleep(500);
+  out.searchCall = calls.find((c) => c.type.endsWith("/catalog_search"));
+  out.searchResultEscaped = root.textContent.includes("Haribo · Stars <i>") && !root.querySelector("#content i");
+  out.searchKeepsFocusCatalog = root.activeElement && root.activeElement.dataset.key === "catalog-query";
+  root.querySelector('[data-action="catalog-add-list"]').click();
+  await sleep(50);
+  out.addCall = calls.find((c) => c.type.endsWith("/catalog_add"));
+  out.addFlash = root.querySelector(".msg") ? root.querySelector(".msg").textContent : null;
+  // Einstellungen: Offline-Schalter + 100-%-offline-Hinweis
+  root.querySelector('[data-tab="settings"]').click();
+  await sleep(50);
+  out.offlinePill = root.textContent.includes("100 % offline");
+  out.offlineChecked = root.querySelector('[data-key="set-offline"]').checked;
+  root.querySelector('[data-action="save-settings"]').click();
+  await sleep(50);
+  const saveCall = calls.find((c) => c.type.endsWith("/save_settings"));
+  out.savedOffline = saveCall && saveCall.settings.use_offline_catalog;
+  out.ok = true;
+} catch (e) {
+  out.error = String(e && e.stack || e);
+}
+document.getElementById("result").textContent = JSON.stringify(out);
+</script>
+</body></html>
