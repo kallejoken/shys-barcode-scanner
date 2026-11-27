@@ -88,6 +88,7 @@ class ShysBarcodePanel extends HTMLElement {
     this._catalogCat = "";
     this._catalogResults = null;
     this._catalogBusy = "";
+    this._reloadPending = false;
   }
 
   set hass(hass) {
@@ -129,8 +130,13 @@ class ShysBarcodePanel extends HTMLElement {
   }
 
   async _load() {
-    if (!this._hass || this._loading) return;
+    if (!this._hass) return;
+    if (this._loading) {
+      this._reloadPending = true;
+      return;
+    }
     this._loading = true;
+    this._reloadPending = false;
     try {
       this._data = await this._ws("get_state");
       this._loaded = true;
@@ -140,6 +146,10 @@ class ShysBarcodePanel extends HTMLElement {
       this._loading = false;
     }
     this._renderContent();
+    if (this._reloadPending) {
+      this._reloadPending = false;
+      await this._load();
+    }
   }
 
   _flash(text, error = false) {
@@ -320,9 +330,10 @@ class ShysBarcodePanel extends HTMLElement {
     const undoBtn = canUndo
       ? `<button class="btn secondary" data-action="undo" data-undo-id="${esc(undo.undo_id)}">Rückgängig</button>`
       : "";
+    const displayName = r.name && r.name !== r.ean ? r.name : "";
     return `<div class="card"><div class="muted">Letzter Scan · ${esc(fmtDate(r.timestamp))}</div>
       <div class="row" style="margin-top:6px"><span class="code">${esc(r.ean)}</span>
-      <span class="grow">${esc(r.name || "")}</span><span class="src ${highlight ? "hl" : ""}">${esc(statusLabel)}</span>
+      <span class="grow">${esc(displayName)}</span><span class="src ${highlight ? "hl" : ""}">${esc(statusLabel)}</span>
       ${undoBtn}</div></div>`;
   }
 
