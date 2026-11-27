@@ -15,7 +15,15 @@ const SOURCE_LABELS = {
   manual: "Eigener Eintrag",
   notification: "Push-Antwort",
   import: "Import",
+  offline_catalog: "Offline-Katalog",
 };
+const CATALOG_CATEGORIES = [
+  ["food", "Lebensmittel & Getränke", "Open Food Facts"],
+  ["beauty", "Drogerie & Kosmetik", "Open Beauty Facts"],
+  ["products", "Haushalt & Alltag", "Open Products Facts"],
+  ["petfood", "Tierfutter", "Open Pet Food Facts"],
+];
+const CATALOG_LABELS = Object.fromEntries(CATALOG_CATEGORIES.map(([k, l]) => [k, l]));
 const STATUS_LABELS = {
   ok: "Auf der Liste",
   duplicate: "Stand schon auf der Liste",
@@ -41,6 +49,16 @@ function esc(value) {
     .replace(/'/g, "&#39;");
 }
 
+function fmtNum(value) {
+  return Number(value || 0).toLocaleString("de-DE");
+}
+
+function fmtMB(bytes) {
+  const mb = Number(bytes || 0) / 1048576;
+  if (!mb) return "–";
+  return `${mb < 0.1 ? "< 0,1" : mb.toLocaleString("de-DE", { maximumFractionDigits: 1 })} MB`;
+}
+
 function fmtDate(iso) {
   if (!iso) return "–";
   const d = new Date(iso);
@@ -63,6 +81,13 @@ class ShysBarcodePanel extends HTMLElement {
     this._loading = false;
     this._stamp = "";
     this._settings = null;
+    this._catalog = null;
+    this._catalogRemote = null;
+    this._catalogSel = null;
+    this._catalogQuery = "";
+    this._catalogCat = "";
+    this._catalogResults = null;
+    this._catalogBusy = "";
   }
 
   set hass(hass) {
@@ -185,6 +210,21 @@ class ShysBarcodePanel extends HTMLElement {
         .checklist { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
         .checklist label.check { align-items: flex-start; }
         .checklist .sub { display: block; font-size: 12px; color: var(--secondary-text-color); font-family: monospace; }
+        .catlist { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+        .catrow { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--divider-color); border-radius: 8px; cursor: pointer; }
+        .catrow:hover { border-color: var(--shys-hellblau); }
+        .catrow input { width: auto; accent-color: var(--shys-blau); }
+        .catrow .num { text-align: right; font-size: 13px; color: var(--secondary-text-color); white-space: nowrap; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+        .stat { border: 1px solid var(--divider-color); border-radius: 8px; padding: 10px 12px; }
+        .stat .v { font-size: 20px; font-weight: 700; color: var(--shys-accent); }
+        .stat .l { font-size: 12px; color: var(--secondary-text-color); }
+        .pill { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
+        .pill.on { background: var(--success-color, #43a047); color: #fff; }
+        .pill.off { background: var(--secondary-background-color, #eee); color: var(--secondary-text-color); border: 1px solid var(--divider-color); }
+        .pill.offline { background: var(--shys-gelb); color: var(--shys-dunkelblau); }
+        .license { font-size: 12px; color: var(--secondary-text-color); border-left: 3px solid var(--shys-gelb); padding: 6px 10px; margin-top: 10px; }
+        .license a { color: var(--shys-accent); }
         @media (max-width: 600px) { .product { grid-template-columns: 1fr; } .actions { justify-content: flex-start; } .subtitle { display: none; } }
       </style>
       <div class="toolbar"><span id="menu"></span>${LOGO_SVG}
@@ -233,6 +273,7 @@ class ShysBarcodePanel extends HTMLElement {
       ["pending", `Unbekannte Scans${pendingCount ? `<span class="badge">${pendingCount}</span>` : ""}`],
       ["products", `Produktdatenbank (${(this._data.products || []).length})`],
       ["tools", "Test &amp; Backup"],
+      ["catalog", "Offline-Katalog"],
       ["settings", "Einstellungen"],
     ];
     let html = "";
@@ -244,6 +285,7 @@ class ShysBarcodePanel extends HTMLElement {
     else if (this._tab === "pending") html += this._renderPending();
     else if (this._tab === "products") html += this._renderProducts();
     else if (this._tab === "settings") html += this._renderSettings();
+    else if (this._tab === "catalog") html += this._renderCatalog();
     else html += this._renderTools();
     content.innerHTML = html;
 
@@ -409,6 +451,8 @@ class ShysBarcodePanel extends HTMLElement {
       notify_services: notify,
       notify_only_home: !!this._val("set-only-home"),
       notify_on_success: !!this._val("set-on-success"),
+      use_offline_catalog: !!this._val("set-offline"),
+      catalog_base_url: this._val("set-catalog-url"),
       use_openfoodfacts: !!this._val("set-off"),
       use_eansuche: !!this._val("set-eansuche"),
       opengtindb_query_id: this._val("set-opengtindb"),
@@ -478,6 +522,9 @@ class ShysBarcodePanel extends HTMLElement {
         <div class="row"><button class="btn secondary" data-action="test-push" ${disabled}>Test-Push senden</button></div>
       </div>
       <div class="card"><h2>Produkt-Quellen &amp; Scanner</h2>
+        <div class="muted">Reihenfolge beim Scan: eigene Produktdatenbank → lokaler Offline-Katalog → Online-APIs. ${this._fullyOffline(s) ? '<span class="pill offline">100 % offline</span>' : ""}</div>
+        <div class="field"><label class="check"><input type="checkbox" data-key="set-offline" ${s.use_offline_catalog !== false ? "checked" : ""} ${disabled} /><span>Lokalen Offline-Katalog nutzen</span></label>
+          <div class="muted">Ohne Internet, in unter 1 ms. Herunterladen im Tab „Offline-Katalog“. Offline-Katalog an und Online-APIs aus = 100 % offline.</div></div>
         <div class="field"><label class="check"><input type="checkbox" data-key="set-off" ${s.use_openfoodfacts ? "checked" : ""} ${disabled} /><span>Open Food Facts abfragen</span></label></div>
         <div class="field"><label class="check"><input type="checkbox" data-key="set-eansuche" ${s.use_eansuche ? "checked" : ""} ${disabled} /><span>ean-suche.net abfragen</span></label></div>
         <div class="field"><label class="lab" for="set-opengtindb">OpengtinDB-QueryID (optional)</label>
@@ -486,16 +533,152 @@ class ShysBarcodePanel extends HTMLElement {
           <input id="set-user-agent" type="text" data-key="set-user-agent" value="${esc(s.user_agent || "")}" ${disabled} /></div>
         <div class="field"><label class="lab" for="set-esphome">ESPHome-Gerät für Rückmeldung (optional)</label>
           <input id="set-esphome" type="text" data-key="set-esphome" value="${esc(s.esphome_device_prefix || "")}" placeholder="z. B. barcode-scanner" ${disabled} /></div>
+        <div class="field"><label class="lab" for="set-catalog-url">Adresse des Offline-Katalogs (optional)</label>
+          <input id="set-catalog-url" type="text" data-key="set-catalog-url" value="${esc(s.catalog_base_url || "")}" placeholder="${esc(this._settings.default_catalog_base_url || "leer = Standard")}" ${disabled} />
+          <div class="muted">Leer = Standard (GitHub-Release offline-catalog-de).</div></div>
       </div>
       <div class="card">
         <div class="row"><button class="btn" data-action="save-settings" ${disabled}>Einstellungen speichern</button></div>
       </div>`;
   }
 
+  _fullyOffline(s) {
+    return !!(s && s.use_offline_catalog !== false && !s.use_openfoodfacts && !s.use_eansuche && !s.opengtindb_query_id);
+  }
+
+  async _loadCatalog(force = false) {
+    if (this._catalog && !force) return;
+    try {
+      this._catalog = await this._ws("catalog_status");
+      if (!this._catalogSel) {
+        const installed = this._catalog.installed_categories || [];
+        this._catalogSel = new Set(installed.length ? installed : CATALOG_CATEGORIES.map(([k]) => k));
+      }
+    } catch (err) {
+      this._flash(`Offline-Katalog: Status nicht abrufbar: ${err.message || err}`, true);
+    }
+  }
+
+  _selectedCategories() {
+    const boxes = this.shadowRoot.querySelectorAll("[data-catsel]");
+    if (!boxes.length) return [...(this._catalogSel || [])];
+    const result = [];
+    boxes.forEach((el) => {
+      if (el.checked) result.push(el.dataset.catsel);
+    });
+    return result;
+  }
+
+  _renderCatalog() {
+    const st = this._catalog;
+    if (!st) return `<div class="card empty">Lade Offline-Katalog …</div>`;
+    const remote = this._catalogRemote;
+    const remoteByKey = Object.fromEntries(((remote && remote.categories) || []).map((c) => [c.key, c]));
+    const counts = st.counts || {};
+    const sel = this._catalogSel || new Set();
+    const disabled = this._isAdmin && !this._catalogBusy ? "" : "disabled";
+    const busy = this._catalogBusy
+      ? `<div class="msg" style="background:var(--shys-blau)">${esc(this._catalogBusy)}</div>`
+      : "";
+    const state = st.installed
+      ? `<span class="pill on">Installiert</span>`
+      : `<span class="pill off">Nicht installiert</span>`;
+    const disabledHint = st.installed && st.enabled === false
+      ? `<div class="muted" style="margin-top:8px">Hinweis: Im Tab „Einstellungen“ ist „Lokalen Offline-Katalog nutzen“ ausgeschaltet – Scans nutzen den Katalog gerade nicht.</div>`
+      : "";
+    const update = remote
+      ? (remote.update_available
+        ? `<div class="muted" style="margin-top:8px"><span class="pill offline">Update verfügbar</span> Online-Stand vom ${esc(fmtDate(remote.generated_at))}.</div>`
+        : `<div class="muted" style="margin-top:8px">Online-Stand vom ${esc(fmtDate(remote.generated_at))}${st.installed ? " – du bist aktuell." : "."}</div>`)
+      : "";
+    let html = busy + `<div class="card"><h2>Deutscher Offline-Katalog</h2>
+      <div class="row">${state}<span class="muted">Komplett lokal in Home Assistant – ohne Internet, ohne API-Limits.</span></div>
+      <div class="stats">
+        <div class="stat"><div class="v">${st.installed ? fmtNum(st.total_count) : "–"}</div><div class="l">Produkte</div></div>
+        <div class="stat"><div class="v">${st.installed ? esc(fmtMB(st.size_bytes)) : "–"}</div><div class="l">Speicher auf der Platte</div></div>
+        <div class="stat"><div class="v">${st.installed ? esc(fmtDate(st.generated_at)) : "–"}</div><div class="l">Datenstand</div></div>
+        <div class="stat"><div class="v">${st.installed ? esc(fmtDate(st.downloaded_at)) : "–"}</div><div class="l">Heruntergeladen</div></div>
+      </div>${update}${disabledHint}</div>`;
+
+    const rows = CATALOG_CATEGORIES.map(([key, label, source]) => {
+      const r = remoteByKey[key];
+      const local = st.installed && (st.installed_categories || []).includes(key)
+        ? `${fmtNum(counts[key])} installiert`
+        : "nicht installiert";
+      const online = r ? ` · online ${fmtNum(r.count)} · ${esc(fmtMB(r.size_bytes))}` : "";
+      return `<label class="catrow"><input type="checkbox" data-key="catsel-${key}" data-catsel="${key}" ${sel.has(key) ? "checked" : ""} ${disabled} />
+        <span><span class="pname">${esc(label)}</span><span class="muted"> · ${esc(source)}</span></span>
+        <span class="num">${local}${online}</span></label>`;
+    }).join("");
+    const adminNote = this._isAdmin ? "" : `<div class="muted">Laden und Löschen dürfen nur Administratoren.</div>`;
+    html += `<div class="card"><h2>Kategorien wählen</h2>
+      <div class="muted">Nur die angehakten Kategorien werden geladen. Abgewählte Kategorien verschwinden beim nächsten Laden aus dem Katalog.</div>
+      <div class="catlist">${rows}</div>${adminNote}
+      <div class="row" style="margin-top:8px">
+        <button class="btn" data-action="catalog-download" ${disabled}>${st.installed ? "Katalog aktualisieren" : "Katalog laden"}</button>
+        <button class="btn secondary" data-action="catalog-check" ${this._catalogBusy ? "disabled" : ""}>Nach Updates prüfen</button>
+        <span class="grow"></span>
+        <button class="btn danger" data-action="catalog-delete" ${disabled || (st.installed ? "" : "disabled")}>Offline-Katalog löschen</button>
+      </div>
+      <div class="license">Datenquellen: <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a>,
+        <a href="https://world.openbeautyfacts.org" target="_blank" rel="noopener">Open Beauty Facts</a>,
+        <a href="https://world.openproductsfacts.org" target="_blank" rel="noopener">Open Products Facts</a>,
+        <a href="https://world.openpetfoodfacts.org" target="_blank" rel="noopener">Open Pet Food Facts</a> –
+        lizenziert unter der <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">Open Database License (ODbL)</a>.
+        Gefiltert auf in Deutschland erhältliche Produkte mit gültiger EAN.</div></div>`;
+
+    html += `<div class="card"><h2>Offline-Suche</h2>`;
+    if (!st.installed) {
+      return html + `<div class="empty">Lade zuerst den Offline-Katalog, um darin zu suchen.</div></div>`;
+    }
+    const catOpts = [["", "Alle Kategorien"], ...CATALOG_CATEGORIES.filter(([k]) => (st.installed_categories || []).includes(k)).map(([k, l]) => [k, l])];
+    html += `<div class="row">
+        <input type="text" class="grow" data-key="catalog-query" placeholder="Name, Marke oder EAN (z. B. Haribo, Zahnpasta, 4001686)" value="${esc(this._catalogQuery)}" />
+        <select data-key="catalog-cat" style="width:auto">${this._selectOptions(catOpts, this._catalogCat)}</select>
+        <button class="btn" data-action="catalog-search">Suchen</button>
+      </div>`;
+    const results = this._catalogResults;
+    if (results && !results.length) html += `<div class="empty">Nichts gefunden.</div>`;
+    for (const item of results || []) {
+      const k = esc(item.ean);
+      const own = item.in_own_db
+        ? `<span class="src hl">In eigener DB${item.own_name && item.own_name !== item.name ? `: ${esc(item.own_name)}` : ""}</span>`
+        : "";
+      html += `<div class="product"><div>
+          <div class="pname">${esc(item.brand ? `${item.brand} · ${item.name}` : item.name)}</div>
+          <div class="muted"><span class="code" style="font-size:13px">${k}</span> · <span class="src">${esc(CATALOG_LABELS[item.category] || item.category)}</span> ${own}</div>
+        </div>
+        <div class="actions">
+          <button class="btn" data-action="catalog-add-list" data-ean="${k}">Auf Einkaufsliste</button>
+          ${item.in_own_db ? "" : `<button class="btn secondary" data-action="catalog-add" data-ean="${k}">In eigene DB übernehmen</button>`}
+        </div></div>`;
+    }
+    return html + `</div>`;
+  }
+
+  async _runCatalogSearch() {
+    const query = (this._catalogQuery || "").trim();
+    if (!query) {
+      this._catalogResults = null;
+      this._renderContent();
+      return;
+    }
+    const seq = (this._catalogSeq = (this._catalogSeq || 0) + 1);
+    try {
+      const res = await this._ws("catalog_search", { query, category: this._catalogCat || null, limit: 30 });
+      if (seq !== this._catalogSeq) return;
+      this._catalogResults = res.results || [];
+    } catch (err) {
+      this._flash(`Suche fehlgeschlagen: ${err.message || err}`, true);
+      return;
+    }
+    this._renderContent();
+  }
+
   _renderTools() {
     return `${this._renderLast()}
       <div class="card"><h2>Test-Scan</h2>
-        <div class="muted">Verarbeitet einen Code genau wie ein echter Scan (lokale Datenbank, APIs, Liste).</div>
+        <div class="muted">Verarbeitet einen Code genau wie ein echter Scan (eigene Datenbank, Offline-Katalog, APIs, Liste).</div>
         <div class="row" style="margin-top:8px">
           <input type="text" class="grow" data-key="test-ean" placeholder="z. B. 4337256722261" />
           <button class="btn" data-action="test-scan">Scannen</button>
@@ -524,10 +707,23 @@ class ShysBarcodePanel extends HTMLElement {
     if (ev.target.dataset.key === "search") {
       this._search = ev.target.value;
       this._renderContent();
+    } else if (ev.target.dataset.key === "catalog-query") {
+      this._catalogQuery = ev.target.value;
+      clearTimeout(this._catalogTimer);
+      this._catalogTimer = setTimeout(() => this._runCatalogSearch(), 350);
     }
   }
 
   async _onChange(ev) {
+    if (ev.target.dataset.catsel) {
+      this._catalogSel = new Set(this._selectedCategories());
+      return;
+    }
+    if (ev.target.dataset.key === "catalog-cat") {
+      this._catalogCat = ev.target.value;
+      this._runCatalogSearch();
+      return;
+    }
     if (ev.target.dataset.key === "import-file" && ev.target.files && ev.target.files[0]) {
       const text = await ev.target.files[0].text();
       const area = this.shadowRoot.querySelector('[data-key="import-text"]');
@@ -546,8 +742,64 @@ class ShysBarcodePanel extends HTMLElement {
           this._tab = btn.dataset.tab;
           this._editing = null;
           if (this._tab === "settings") await this._loadSettings();
+          if (this._tab === "catalog") await this._loadCatalog(true);
           this._renderContent();
           return;
+        case "catalog-check": {
+          btn.disabled = true;
+          try {
+            this._catalogRemote = await this._ws("catalog_check_updates");
+          } finally {
+            btn.disabled = false;
+          }
+          await this._loadCatalog(true);
+          this._flash(this._catalogRemote.update_available ? "Ein neuer Katalog-Stand ist verfügbar." : "Online-Stand abgerufen.");
+          return;
+        }
+        case "catalog-download": {
+          if (!this._isAdmin) return this._flash("Den Katalog dürfen nur Administratoren laden.", true);
+          const categories = this._selectedCategories();
+          if (!categories.length) return this._flash("Bitte mindestens eine Kategorie wählen.", true);
+          this._catalogSel = new Set(categories);
+          this._catalogBusy = "Offline-Katalog wird geladen und eingerichtet … das kann einen Moment dauern.";
+          this._renderContent();
+          try {
+            this._catalog = await this._ws("catalog_download", { categories });
+          } finally {
+            this._catalogBusy = "";
+          }
+          if (this._catalogRemote) this._catalogRemote.update_available = false;
+          this._catalogResults = null;
+          this._flash(`Offline-Katalog bereit: ${fmtNum(this._catalog.total_count)} Produkte (${fmtMB(this._catalog.size_bytes)}).`);
+          return;
+        }
+        case "catalog-delete": {
+          if (!this._isAdmin) return this._flash("Den Katalog dürfen nur Administratoren löschen.", true);
+          if (!confirm("Offline-Katalog wirklich löschen? Deine eigene Produktdatenbank bleibt erhalten.")) return;
+          const res = await this._ws("catalog_delete");
+          this._catalog = res.status;
+          this._catalogResults = null;
+          this._flash("Offline-Katalog gelöscht.");
+          return;
+        }
+        case "catalog-search":
+          this._catalogQuery = this._val("catalog-query");
+          await this._runCatalogSearch();
+          return;
+        case "catalog-add":
+        case "catalog-add-list": {
+          btn.disabled = true;
+          const res = await this._ws("catalog_add", { ean, add_to_list: action === "catalog-add-list" });
+          const name = res.product ? res.product.name : ean;
+          if (res.scan) {
+            this._flash(`${res.scan.name || name}: ${STATUS_LABELS[res.scan.status] || res.scan.status}`, res.scan.status === "error");
+          } else {
+            this._flash(`„${name}“ in die eigene Produktdatenbank übernommen.`);
+          }
+          await this._load();
+          await this._runCatalogSearch();
+          return;
+        }
         case "save-settings": {
           if (!this._isAdmin) return this._flash("Einstellungen dürfen nur Administratoren ändern.", true);
           btn.disabled = true;
