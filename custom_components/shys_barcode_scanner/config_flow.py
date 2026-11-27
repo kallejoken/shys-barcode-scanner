@@ -19,10 +19,12 @@ from .const import (
     CONF_ESPHOME_DEVICE_PREFIX,
     CONF_NAME,
     CONF_NAME_FORMAT,
+    CONF_NOTIFY_ON_SUCCESS,
     CONF_NOTIFY_ONLY_HOME,
     CONF_NOTIFY_SERVICE,
     CONF_NOTIFY_SERVICES,
     CONF_OPENGTINDB_QUERY_ID,
+    CONF_QUICK_LISTS,
     CONF_TODO_ENTITY,
     CONF_UNKNOWN_MODE,
     CONF_USE_EANSUCHE,
@@ -38,9 +40,13 @@ from .const import (
     UNKNOWN_MODES,
     configured_notify_services,
     normalize_notify_services,
+    normalize_todo_entities,
 )
 
 TODO_SELECTOR = selector.EntitySelector(selector.EntitySelectorConfig(domain="todo"))
+TODO_MULTI_SELECTOR = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="todo", multiple=True)
+)
 TEXT_SELECTOR = selector.TextSelector()
 
 TEXT_OPTION_KEYS = (
@@ -111,6 +117,11 @@ def build_options_schema(
         vol.Required(
             CONF_TODO_ENTITY, default=values.get(CONF_TODO_ENTITY) or DEFAULT_TODO_ENTITY
         ): TODO_SELECTOR,
+        vol.Optional(
+            CONF_QUICK_LISTS,
+            default=normalize_todo_entities(values.get(CONF_QUICK_LISTS)),
+            description={"suggested_value": normalize_todo_entities(values.get(CONF_QUICK_LISTS))},
+        ): TODO_MULTI_SELECTOR,
         vol.Required(CONF_DUPLICATE_MODE, default=values[CONF_DUPLICATE_MODE]): _select(
             DUPLICATE_MODES, CONF_DUPLICATE_MODE
         ),
@@ -132,6 +143,9 @@ def build_options_schema(
         vol.Required(
             CONF_NOTIFY_ONLY_HOME, default=bool(values.get(CONF_NOTIFY_ONLY_HOME, False))
         ): selector.BooleanSelector(),
+        vol.Required(
+            CONF_NOTIFY_ON_SUCCESS, default=bool(values.get(CONF_NOTIFY_ON_SUCCESS, False))
+        ): selector.BooleanSelector(),
     }
     # Optionale Texte mit suggested_value, damit man sie auch wieder leeren kann
     for key in TEXT_OPTION_KEYS:
@@ -149,6 +163,8 @@ def normalize_options(user_input: dict[str, Any]) -> dict[str, Any]:
     data[CONF_NOTIFY_SERVICES] = normalize_notify_services(data.get(CONF_NOTIFY_SERVICES))
     data.pop(CONF_NOTIFY_SERVICE, None)
     data[CONF_NOTIFY_ONLY_HOME] = bool(data.get(CONF_NOTIFY_ONLY_HOME, False))
+    data[CONF_NOTIFY_ON_SUCCESS] = bool(data.get(CONF_NOTIFY_ON_SUCCESS, False))
+    data[CONF_QUICK_LISTS] = normalize_todo_entities(data.get(CONF_QUICK_LISTS))
     return data
 
 

@@ -10,6 +10,7 @@ from homeassistant.components import websocket_api
 from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN
+from .settings import build_settings_payload, config_entry, validate_settings
 
 
 def _manager(hass: HomeAssistant, connection: Any, msg: dict[str, Any]):
@@ -84,6 +85,71 @@ async def ws_scan(hass: HomeAssistant, connection: websocket_api.ActiveConnectio
     connection.send_result(msg["id"], await manager.async_handle_scan(msg["ean"], device=msg.get("device")))
 
 
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/undo_scan",
+        vol.Optional("undo_id"): vol.Any(None, str),
+    }
+)
+@websocket_api.async_response
+async def ws_undo_scan(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if (manager := _manager(hass, connection, msg)) is None:
+        return
+    undo_id = msg.get("undo_id") or None
+    connection.send_result(msg["id"], await manager.async_undo_scan(undo_id))
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/get_settings"})
+@callback
+def ws_get_settings(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if (manager := _manager(hass, connection, msg)) is None:
+        return
+    connection.send_result(msg["id"], build_settings_payload(hass, manager.config))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/save_settings",
+        vol.Required("settings"): dict,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_save_settings(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    if (manager := _manager(hass, connection, msg)) is None:
+        return
+    entry = config_entry(hass)
+    if entry is None:
+        connection.send_error(msg["id"], "not_loaded", "SHYS Barcode Scanner ist nicht eingerichtet")
+        return
+    try:
+        options = validate_settings(msg["settings"], {**entry.data, **entry.options})
+    except ValueError as err:
+        connection.send_error(msg["id"], "invalid_format", str(err))
+        return
+    hass.config_entries.async_update_entry(entry, options=options)
+    manager.update_config({**entry.data, **entry.options})
+    manager.async_notify_listeners()
+    connection.send_result(msg["id"], build_settings_payload(hass, {**entry.data, **entry.options}))
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/test_push",
+        vol.Optional("notify_services"): vol.Any(None, str, [str]),
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_test_push(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    if (manager := _manager(hass, connection, msg)) is None:
+        return
+    services = msg.get("notify_services")
+    connection.send_result(msg["id"], await manager.async_test_push(services))
+
+
 @websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/export"})
 @callback
 def ws_export(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
@@ -121,5 +187,5 @@ async def ws_import(hass: HomeAssistant, connection: websocket_api.ActiveConnect
 
 @callback
 def async_register_websocket_commands(hass: HomeAssistant) -> None:
-    for handler in (ws_get_state, ws_learn, ws_delete, ws_dismiss, ws_scan, ws_export, ws_import):
+    for handler in (ws_get_state, ws_learn, ws_delete, ws_dismiss, ws_scan, ws_undo_scan, ws_get_settings, ws_save_settings, ws_test_push, ws_export, ws_import):
         websocket_api.async_register_command(hass, handler)

@@ -6,7 +6,7 @@ from typing import Final
 
 DOMAIN: Final = "shys_barcode_scanner"
 NAME: Final = "SHYS Barcode Scanner"
-VERSION: Final = "1.2.0"
+VERSION: Final = "1.3.0"
 
 # Lokale Datenbank (HA-Store unter <config>/.storage/shys_barcode_scanner)
 STORAGE_KEY: Final = DOMAIN
@@ -24,7 +24,10 @@ NOTIFY_TAG_PREFIX: Final = "shys_barcode_"
 # behavior: textInput öffnet das Textfeld auf iOS UND Android (Companion-Doku).
 NOTIFY_ACTION_REPLY_PREFIX: Final = "SHYS_REPLY_"
 NOTIFY_ACTION_DISMISS_PREFIX: Final = "SHYS_DISMISS_"
+NOTIFY_ACTION_UNDO_PREFIX: Final = "SHYS_UNDO_"
 NOTIFY_ACTION_REPLY_GENERIC: Final = "REPLY"
+NOTIFY_OK_TAG_PREFIX: Final = "shys_barcode_ok_"
+UNDO_HISTORY_LIMIT: Final = 20
 
 # Dispatcher-Signal für Sensoren
 SIGNAL_UPDATE: Final = f"{DOMAIN}_update"
@@ -50,6 +53,8 @@ CONF_USER_AGENT: Final = "user_agent"
 CONF_NOTIFY_SERVICE: Final = "notify_service"  # Legacy, bleibt für bestehende Configs
 CONF_NOTIFY_SERVICES: Final = "notify_services"
 CONF_NOTIFY_ONLY_HOME: Final = "notify_only_home"
+CONF_NOTIFY_ON_SUCCESS: Final = "notify_on_success"
+CONF_QUICK_LISTS: Final = "quick_lists"
 CONF_ESPHOME_DEVICE_PREFIX: Final = "esphome_device_prefix"
 
 # Interne Notify-Dienste, die nicht in der Mehrfachauswahl erscheinen
@@ -88,6 +93,8 @@ DEFAULT_OPTIONS: Final = {
     CONF_USER_AGENT: DEFAULT_USER_AGENT,
     CONF_NOTIFY_SERVICES: [],
     CONF_NOTIFY_ONLY_HOME: False,
+    CONF_NOTIFY_ON_SUCCESS: False,
+    CONF_QUICK_LISTS: [],
     CONF_ESPHOME_DEVICE_PREFIX: "",
 }
 
@@ -149,6 +156,27 @@ def normalize_notify_services(value: object) -> list[str]:
             continue
         seen.add(service)
         result.append(service)
+    return result
+
+
+def normalize_todo_entities(value: object) -> list[str]:
+    """Liste von todo.*-Entitäten säubern: trimmen, nur todo.*, Reihenfolge behalten, deduplizieren."""
+    if value is None or value is False:
+        items: list[object] = []
+    elif isinstance(value, str):
+        items = [value]
+    elif isinstance(value, (list, tuple, set)):
+        items = list(value)
+    else:
+        items = [value]
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in items:
+        entity = str(raw or "").strip()
+        if not entity.startswith("todo.") or entity in seen:
+            continue
+        seen.add(entity)
+        result.append(entity)
     return result
 
 
